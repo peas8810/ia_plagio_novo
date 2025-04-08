@@ -197,14 +197,9 @@ if __name__ == "__main__":
         else:
             st.error("Por favor, carregue um arquivo PDF.")
 
-   st.markdown(
-    """
-    <div style="text-align: justify;">
-    A PEAS.Co trabalha sem recursos governamentais ou privados, apenas de doações. Nos ajude com um PIX de qualquer valor, PIX: peas8810@gmail.com. Tem alguma ideia de programa com IA, nos envie um email que tentaremos fazer juntos! Nosso avançado programa de detecção de plágio utiliza inteligência artificial para comparar textos com uma ampla base de dados composta pelos 100 maiores indexadores e repositórios globais, analisando cuidadosamente as similaridades encontradas. Com base em estudos internacionais, considera-se que uma taxa de similaridade de 3% ou mais indica uma alta concentração de trechos raros — ou seja, sequências de palavras pouco frequentes que apontam para uma possível cópia. Para ilustrar o processo de análise documental, imagine que um arquivo A tenha sido integralmente copiado de outro arquivo B. Ainda assim, a similaridade pode ser igual ou inferior a 50%, e não 100%, devido à variação na quantidade de trechos considerados na comparação. Pesquisas demonstram que uma taxa média de 3% ou mais costuma indicar uma elevada incidência de termos semelhantes, configurando, assim, uma possível ocorrência de plágio. É importante ressaltar que a avaliação final sobre a presença de plágio cabe sempre aos autores e responsáveis pelo conteúdo. Para mais informações sobre práticas de integridade acadêmica, acesse <a href="https://plagiarism.org" target="_blank">plagiarism.org</a>. Powered By - PEAS.Co
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+           st.markdown("""<div style="text-align: justify;">
+            A PEAS.Co trabalha sem recursos governamentais ou privados, apenas de doações. Nos ajude com um PIX de qualquer valor, PIX: peas8810@gmail.com. Tem alguma ideia de programa com IA, nos envie um email que tentaremos fazer juntos! Nosso avançado programa de detecção de plágio utiliza inteligência artificial para comparar textos com uma ampla base de dados composta pelos 100 maiores indexadores e repositórios globais, analisando cuidadosamente as similaridades encontradas. Com base em estudos internacionais, considera-se que uma taxa de similaridade de 3% ou mais indica uma alta concentração de trechos raros — ou seja, sequências de palavras pouco frequentes que apontam para uma possível cópia. Para ilustrar o processo de análise documental, imagine que um arquivo A tenha sido integralmente copiado de outro arquivo B. Ainda assim, a similaridade pode ser igual ou inferior a 50%, e não 100%, devido à variação na quantidade de trechos considerados na comparação. Pesquisas demonstram que uma taxa média de 3% ou mais costuma indicar uma elevada incidência de termos semelhantes, configurando, assim, uma possível ocorrência de plágio. É importante ressaltar que a avaliação final sobre a presença de plágio cabe sempre aos autores e responsáveis pelo conteúdo. Para mais informações sobre práticas de integridade acadêmica, acesse <a href="https://plagiarism.org" target="_blank">plagiarism.org</a>. Powered By - PEAS.Co
+            </div>""", unsafe_allow_html=True)
 
     # --- Verificação de Código ---
     st.header("Verificar Autenticidade")
