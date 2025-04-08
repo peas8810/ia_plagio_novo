@@ -158,7 +158,7 @@ if __name__ == "__main__":
     st.subheader("Publicidade")
     # Exibição de imagem para propaganda (substitua a URL pela sua imagem)
     image_url = "https://via.placeholder.com/728x90.png?text=Sua+Publicidade+Aqui"
-    st.image(image_url, caption="Anuncie aqui", use_column_width=True)
+    st.image(image_url, caption="Anuncie aqui", use_container_width=True)
     
     # Incorporação de website (exemplo de iframe para propaganda)
     st.markdown("### Anuncie seu website")
