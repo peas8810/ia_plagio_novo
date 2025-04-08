@@ -220,4 +220,4 @@ if __name__ == "__main__":
     
     # Incorporação de website (exemplo de iframe para propaganda)
     st.markdown("### Anuncie seu website")
-    st.components.v1.iframe("https://loja.cervejariasalomao.com.br/", height=250)
+    st.components.v1.iframe(""https://example.com/anuncio.html", height=250)
