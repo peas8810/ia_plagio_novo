@@ -213,7 +213,7 @@ if __name__ == "__main__":
             st.error("❌ Código inválido ou documento falsificado.")
 
  # --- Seção de Propaganda ---
-    st.subheader("Publicidade")
+    st.subheader("Publicidade - Anuncie Aqui - Envie email para peas8810@gmail.com")
     # Exibição de imagem para propaganda (substitua a URL pela sua imagem)
     image_url = "https://via.placeholder.com/728x90.png?text=Sua+Publicidade+Aqui"
     st.image(image_url, caption="Anuncie aqui", use_container_width=True)
