@@ -154,16 +154,7 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
 if __name__ == "__main__":
     st.title("PlagIA - PEAS.Co")
     
-    # --- Seção de Propaganda ---
-    st.subheader("Publicidade")
-    # Exibição de imagem para propaganda (substitua a URL pela sua imagem)
-    image_url = "https://via.placeholder.com/728x90.png?text=Sua+Publicidade+Aqui"
-    st.image(image_url, caption="Anuncie aqui", use_container_width=True)
-    
-    # Incorporação de website (exemplo de iframe para propaganda)
-    st.markdown("### Anuncie seu website")
-    st.components.v1.iframe("https://loja.cervejariasalomao.com.br/", height=250)
-    
+      
     # --- Registro de Usuário ---
     st.subheader("📋 Registro de Usuário - Apenas para validação")
     nome = st.text_input("Nome completo")
@@ -220,3 +211,13 @@ if __name__ == "__main__":
             st.success("✅ Documento Autêntico e Original!")
         else:
             st.error("❌ Código inválido ou documento falsificado.")
+
+ # --- Seção de Propaganda ---
+    st.subheader("Publicidade")
+    # Exibição de imagem para propaganda (substitua a URL pela sua imagem)
+    image_url = "https://via.placeholder.com/728x90.png?text=Sua+Publicidade+Aqui"
+    st.image(image_url, caption="Anuncie aqui", use_container_width=True)
+    
+    # Incorporação de website (exemplo de iframe para propaganda)
+    st.markdown("### Anuncie seu website")
+    st.components.v1.iframe("https://loja.cervejariasalomao.com.br/", height=250)
