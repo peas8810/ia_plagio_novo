@@ -216,7 +216,7 @@ if __name__ == "__main__":
         else:
             st.error("❌ Código inválido ou documento falsificado.")
 
-  def gerar_qr_code_pix(payload):
+def gerar_qr_code_pix(payload):
     import qrcode
     from io import BytesIO
     from PIL import Image
