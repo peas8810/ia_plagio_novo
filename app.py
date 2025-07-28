@@ -127,6 +127,7 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
     pdf.chapter_body(f"E-mail: {email}")
     pdf.chapter_body(f"Data e Hora: {data_hora}")
     pdf.chapter_body(f"Código de Verificação (Link para inserir o código e conferir: https://iaplagio-wtwg4f3x2ejse4rspbqe2s.streamlit.app/): {codigo_verificacao}")
+    pdf.chapter_body(f"Este relatório foi gerado com o apoio de um colaborador da PEAS.Co 💚")
     
     # Referências encontradas
     pdf.chapter_title("Top Referências encontradas:")
