@@ -97,7 +97,7 @@ def buscar_referencias_crossref(texto):
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, "Relatório de Similaridade de Plágio - PlagIA - PEAS.Co", ln=True, align='C')
+        self.cell(0, 10, "Relatório Técnico de Similaridade Textual - Sistema PlagIA | Powered by PEAS.Co", ln=True, align='C')
 
     def chapter_title(self, title):
         self.set_font('Arial', 'B', 12)
