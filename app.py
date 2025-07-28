@@ -166,7 +166,7 @@ if __name__ == "__main__":
             st.warning("⚠️ Por favor, preencha todos os campos.")
 
     # --- Upload e Processamento do PDF ---
-    arquivo_pdf = st.file_uploader("Faça upload de um arquivo PDF SEM OS NOMES DOS AUTORES E TÍTULO DA REVISTA, PARA GARANTIR AVALIAÇÃO SOMENTE DO TEXTO", type=["pdf"])
+    arquivo_pdf = st.file_uploader("Faça o upload de um artigo em PDF (sem nomes de autores ou informações da revista), garantindo uma avaliação imparcial baseada apenas no conteúdo textual", type=["pdf"])
 
     if st.button("Processar PDF"):
         if arquivo_pdf is not None:
