@@ -127,7 +127,7 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
     pdf.chapter_body(f"E-mail: {email}")
     pdf.chapter_body(f"Data e Hora: {data_hora}")
     pdf.chapter_body(f"Código de Verificação (Link para inserir o código e conferir: https://iaplagio-wtwg4f3x2ejse4rspbqe2s.streamlit.app/): {codigo_verificacao}")
-    pdf.chapter_body(f"Este relatório foi gerado com o apoio de um colaborador da PEAS.Co 💚")
+    pdf.chapter_body(f"Este relatório foi gerado com o apoio de um colaborador da PEAS.Co - (")
     
     # Referências encontradas
     pdf.chapter_title("Top Referências encontradas:")
@@ -244,7 +244,8 @@ st.markdown("---")
 st.markdown(
     """
     <h3 style='color: green;'>💚 Apoie Este Projeto com um Pix!</h3>
-    <p>Temos custos com servidores, desenvolvimento e APIs. Se este site está te ajudando, considere uma contribuição de <strong>R$ 20,00</strong>.</p>
+    <p>🎁 Você pode manter este projeto gratuito para milhares de estudantes e pesquisadores. Com apenas R$ 20,00, você ajuda a manter os servidores, APIs e evolução da ferramenta.
+É como pagar um café para quem te ajudou com horas de leitura. 💚 <strong>R$ 20,00</strong>.</p>
     <p><strong>Chave Pix:</strong> <span style='color: blue;'>pesas8810@gmail.com</span></p>
     <p><strong>Nome do recebedor:</strong> PEAS TECHNOLOGIES</p>
     """,
