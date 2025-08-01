@@ -37,7 +37,7 @@ URL_GOOGLE_SHEETS = "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHu
 # Configurações globais
 CONFIG = {
     'MAX_CONSULTAS_SESSAO': 4,
-    'MIN_TEXT_LENGTH': 1,
+    'MIN_TEXT_LENGTH': 0,
     'MAX_TEXT_LENGTH': 50000,
 }
 
