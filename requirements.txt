@@ -1,11 +1,39 @@
-streamlit
-requests
-PyPDF2
-fpdf
-deep-translator
-Pillow
-qrcode
+# streamlit
+# requests
+# PyPDF2
+# pdfplumber
+# fpdf
+# pillow
+# qrcode
+# transformers
+# torch
+# numpy
+
+streamlit>=1.28.0
+requests>=2.31.0
+PyPDF2>=3.0.1
+fpdf2>=2.7.6
+Pillow>=10.0.0
+qrcode>=7.4.2
+numpy>=1.24.0
+plotly>=5.17.0
+pandas>=2.0.0
+pdfplumber>=0.9.0
 
 
 
 
+# TotalIA Professional - Requirements Mínimos
+# Dependências essenciais para funcionamento básico
+
+# streamlit>=1.28.0
+# requests>=2.31.0
+# PyPDF2>=3.0.1
+# pdfplumber>=0.9.0
+# numpy>=1.24.0
+# fpdf2>=2.7.0
+# Pillow>=10.0.0
+# qrcode[pil]>=7.4.0
+# plotly>=5.15.0
+# torch>=2.0.0
+# transformers>=4.30.0
