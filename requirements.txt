@@ -1,24 +1,24 @@
-# streamlit
-# requests
-# PyPDF2
-# pdfplumber
-# fpdf
-# pillow
-# qrcode
-# transformers
-# torch
-# numpy
-
 streamlit
 requests
 PyPDF2
-fpdf2
-Pillow
-qrcode
-numpy
-plotly
-pandas
 pdfplumber
+fpdf
+pillow
+qrcode
+transformers
+torch
+numpy
+
+# streamlit
+# requests
+# PyPDF2
+# fpdf2
+# Pillow
+# qrcode
+# numpy
+# plotly
+# pandas
+# pdfplumber
 
 
 
