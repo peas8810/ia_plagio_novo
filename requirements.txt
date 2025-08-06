@@ -1,9 +1,10 @@
 streamlit
 requests
 pypdf2
-pdfplumber
 fpdf
 numpy
 plotly
 qrcode
 Pillow
+fuzzywuzzy
+python-Levenshtein
