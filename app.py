@@ -1,13 +1,13 @@
 # =============================
-# 🍀 Sistema PlagIA - v7.0 - Integração Robusta
-# Mantém a estrutura original com o novo motor de busca inteligente.
+# 🍀 Sistema PlagIA - v7.1 - Correção de Cache
+# Corrige o erro de hash do Streamlit ignorando o status_placeholder no cache.
 # PEAS.Co 2024
 # =============================
 
 import streamlit as st
 import requests
 import PyPDF2
-import pdfplumber # Dependência adicionada para extração robusta
+import pdfplumber
 import difflib
 from fpdf import FPDF
 from io import BytesIO
@@ -26,7 +26,7 @@ import logging
 from functools import lru_cache
 import gc
 
-# Configuração da página (mantida)
+# Configuração da página
 st.set_page_config(
     page_title="PlagIA Professional - Detecção Avançada de Plágio",
     page_icon="🔍",
@@ -34,27 +34,27 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# URL da API (mantida)
+# URL da API
 URL_GOOGLE_SHEETS = (
     "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
  )
 
-# Configurações globais (adaptadas para robustez)
+# Configurações globais
 CONFIG = {
     'MAX_CONSULTAS_SESSAO': 10,
     'MIN_TEXT_LENGTH': 700,
     'MAX_TEXT_LENGTH': 80000,
     'MIN_WORDS': 100,
     'TIMEOUT_API': 30,
-    'MAX_REFS_API': 20, # Renomeado de MAX_REFS para clareza
+    'MAX_REFS_API': 20,
     'CACHE_TTL': 3600,
 }
 
-# Configuração de logging (mantida)
+# Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CSS (mantido)
+# CSS
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
 def load_optimized_css() -> str:
     return """
@@ -87,12 +87,11 @@ def load_optimized_css() -> str:
     """
 
 # ===================================================================
-# FUNÇÕES DE PROCESSAMENTO (SUBSTITUÍDAS PELAS VERSÕES ROBUSTAS)
+# FUNÇÕES DE PROCESSAMENTO
 # ===================================================================
 
 @st.cache_data(show_spinner=False, ttl=CONFIG['CACHE_TTL'])
 def extrair_texto_pdf_otimizado(arquivo_bytes: bytes) -> str:
-    """Usa pdfplumber (preferencial) e PyPDF2 (fallback) para extrair texto."""
     texto = ""
     try:
         with pdfplumber.open(BytesIO(arquivo_bytes)) as pdf:
@@ -111,7 +110,6 @@ def extrair_texto_pdf_otimizado(arquivo_bytes: bytes) -> str:
 
 @lru_cache(maxsize=64)
 def limpar_texto_otimizado(texto_bruto: str) -> str:
-    """Limpeza agressiva para isolar o conteúdo principal para busca."""
     if not texto_bruto: return ""
     texto_lower = texto_bruto.lower()
     match = re.search(r'(resumo|abstract)(.*?)(\n.*?){0,10}(palavras-chave|keywords|introdução|introduction)', texto_lower, re.DOTALL)
@@ -135,19 +133,22 @@ def gerar_query_de_busca(texto_limpo: str) -> str:
     palavras = [p for p in texto_limpo.split() if p not in stopwords and len(p) > 3]
     return " ".join(palavras[:20])
 
+# ##################################################################
+# ## AQUI ESTÁ A CORREÇÃO ##
+# ##################################################################
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
-def buscar_referencias_robusto(texto_limpo: str, status_placeholder) -> List[Dict]:
-    """Busca em cascata no CrossRef e Semantic Scholar."""
+def buscar_referencias_robusto(texto_limpo: str, _status_placeholder) -> List[Dict]:
+    """Busca em cascata no CrossRef e Semantic Scholar. O _status_placeholder é ignorado pelo cache."""
     query = gerar_query_de_busca(texto_limpo)
     if not query:
         logger.error("Query de busca vazia após limpeza.")
         return []
 
     # 1. Tenta CrossRef
-    status_placeholder.text("🔎 Buscando em 'CrossRef'...")
+    _status_placeholder.text("🔎 Buscando em 'CrossRef'...")
     try:
         url_crossref = f"https://api.crossref.org/works?query.bibliographic={requests.utils.quote(query )}&rows={CONFIG['MAX_REFS_API']}&sort=relevance"
-        headers = {'User-Agent': f'PlagIA/7.0 (mailto:contato@peas.co)'}
+        headers = {'User-Agent': f'PlagIA/7.1 (mailto:contato@peas.co)'}
         r = requests.get(url_crossref, headers=headers, timeout=CONFIG['TIMEOUT_API'])
         r.raise_for_status()
         items = r.json().get('message', {}).get('items', [])
@@ -158,7 +159,7 @@ def buscar_referencias_robusto(texto_limpo: str, status_placeholder) -> List[Dic
         logger.warning(f"API CrossRef falhou: {e}")
 
     # 2. Fallback para Semantic Scholar
-    status_placeholder.text("🔎 Buscando em 'Semantic Scholar'...")
+    _status_placeholder.text("🔎 Buscando em 'Semantic Scholar'...")
     try:
         url_semantic = f"https://api.semanticscholar.org/graph/v1/paper/search?query={requests.utils.quote(query )}&limit={CONFIG['MAX_REFS_API']}&fields=title,abstract,year,url,externalIds"
         r = requests.get(url_semantic, timeout=CONFIG['TIMEOUT_API'])
@@ -173,7 +174,7 @@ def buscar_referencias_robusto(texto_limpo: str, status_placeholder) -> List[Dic
     return []
 
 # ===================================================================
-# FUNÇÕES AUXILIARES (Mantidas do código original)
+# FUNÇÕES AUXILIARES
 # ===================================================================
 
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
@@ -220,7 +221,7 @@ def calcular_similaridade_otimizada(texto1: str, texto2: str) -> float:
         return 0.0
 
 # =============================
-# Classe PDF e Relatório (Mantidas)
+# Classe PDF e Relatório
 # =============================
 class PDFOtimizado(FPDF):
     def __init__(self):
@@ -269,7 +270,7 @@ def gerar_relatorio_otimizado(referencias_sim: List, nome: str, email: str, codi
         return None
 
 # =============================
-# Visualizações e Métricas (Mantidas)
+# Visualizações e Métricas
 # =============================
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
 def criar_grafico_barras_otimizado(referencias_sim: List) -> Optional[go.Figure]:
@@ -300,7 +301,7 @@ def exibir_metricas_otimizadas(referencias_sim: List):
         st.markdown(f'<div class="metric-container"><div class="metric-value">{high_count}</div><div class="metric-label">Alta Similaridade</div></div>', unsafe_allow_html=True)
 
 # =============================
-# Interface Principal (Lógica Principal Adaptada)
+# Interface Principal
 # =============================
 def main():
     st.markdown(load_optimized_css(), unsafe_allow_html=True)
@@ -335,7 +336,7 @@ def main():
         processar = st.button("🚀 Analisar Documento", disabled=(rest <= 0))
 
     with col2:
-        st.markdown("""<div class="glass-card"><h3>ℹ️ Sistema</h3><p><strong>Versão:</strong> Robusta 7.0</p><p><strong>Cache:</strong> Ativo</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="glass-card"><h3>ℹ️ Sistema</h3><p><strong>Versão:</strong> Robusta 7.1</p><p><strong>Cache:</strong> Ativo</p></div>""", unsafe_allow_html=True)
         st.markdown(f"""<div class="recommendation-box"><h4>📋 Requisitos</h4><ul><li>Mínimo {CONFIG['MIN_WORDS']} palavras</li><li>PDF com texto selecionável</li></ul></div>""", unsafe_allow_html=True)
 
     if processar:
@@ -362,7 +363,7 @@ def main():
                 status.text("🧹 Processando texto para busca..."); bar.progress(40)
                 texto_para_busca = limpar_texto_otimizado(texto_bruto)
                 
-                bar.progress(60) # A barra de progresso avança durante a busca na função
+                bar.progress(60)
                 refs = buscar_referencias_robusto(texto_para_busca, status)
                 if not refs:
                     st.warning("⚠️ Nenhuma referência encontrada na base de dados."); bar.progress(100)
@@ -373,7 +374,7 @@ def main():
                 for r in refs:
                     base = f"{r['titulo']} {r['resumo']}"
                     sim = calcular_similaridade_otimizada(texto_para_validar, base)
-                    if sim > 0.05: # Filtro de similaridade mínima
+                    if sim > 0.05:
                         resultados.append((r['titulo'], sim, r['link'], r['doi'], r['ano']))
                 resultados.sort(key=lambda x: x[1], reverse=True)
                 
