@@ -1,6 +1,6 @@
 # =============================
-# 🍀 Sistema PlagIA - v9.0 - Layout Profissional e Similaridade Aprimorada
-# Mantém a estrutura original com UI/UX moderna e cálculo de similaridade robusto.
+# 🍀 Sistema PlagIA - v9.1 - Final e Corrigido
+# Layout profissional, similaridade robusta com fuzzywuzzy e relatório com 10 referências.
 # =============================
 
 import streamlit as st
@@ -17,7 +17,7 @@ import re
 from collections import Counter
 import numpy as np
 import plotly.graph_objects as go
-from fuzzywuzzy import fuzz # Nova biblioteca para similaridade
+from fuzzywuzzy import fuzz # Biblioteca para similaridade robusta
 
 # 🔗 URL da API gerada no Google Sheets
 URL_GOOGLE_SHEETS = "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
@@ -92,7 +92,6 @@ def calcular_similaridade_robusta(texto1, texto2):
     return fuzz.token_sort_ratio(texto1, texto2) / 100.0
 
 def buscar_referencias_crossref(texto):
-    # Uma query mais inteligente, removendo palavras comuns
     stopwords = ['a', 'o', 'e', 'de', 'do', 'da', 'para', 'com']
     palavras_query = [p for p in texto.split() if p.lower() not in stopwords][:15]
     query = "+".join(palavras_query)
@@ -152,7 +151,6 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
         pdf.chapter_title("2. Resultados")
         pdf.chapter_body("Nenhuma referência com similaridade significativa foi encontrada.")
     else:
-        # Inclui as 10 principais referências
         top_refs = referencias_com_similaridade[:10]
         percentuais = [p for _, p, _, _, _ in top_refs]
         
@@ -175,22 +173,90 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
 # =============================
 # 💻 Interface Principal do Streamlit
 # =============================
-st.markdown(load_professional_css(), unsafe_allow_html=True)
-st.markdown('<div class="hero-header"><h1>🍀 PlagIA Professional</h1><p>Análise de Similaridade de Documentos com IA</p></div>', unsafe_allow_html=True)
+def main():
+    st.markdown(load_professional_css(), unsafe_allow_html=True)
+    st.markdown('<div class="hero-header"><h1>🍀 PlagIA Professional</h1><p>Análise de Similaridade de Documentos com IA</p></div>', unsafe_allow_html=True)
 
-if "consultas" not in st.session_state:
-    st.session_state["consultas"] = 0
+    if "consultas" not in st.session_state:
+        st.session_state["consultas"] = 0
 
-# --- Layout com Sidebar ---
-with st.sidebar:
-    st.markdown('<div class="sidebar-modern"><h3>📊 Painel de Controle</h3></div>', unsafe_allow_html=True)
-    st.info(f"**Consultas restantes:** {4 - st.session_state['consultas']}/4")
-    
-    st.markdown("---")
-    st.subheader("Verificação de Autenticidade")
-    codigo_input = st.text_input("Digite o código de verificação")
-    if st.button("🔍 Verificar Código"):
-        if verificar_codigo_google_sheets(codigo_input):
-            st.success("✅ Documento Autêntico!")
+    # --- Layout com Sidebar ---
+    with st.sidebar:
+        st.markdown('<div class="sidebar-modern"><h3>📊 Painel de Controle</h3></div>', unsafe_allow_html=True)
+        st.info(f"**Consultas restantes:** {4 - st.session_state['consultas']}/4")
+        
+        st.markdown("---")
+        st.subheader("Verificação de Autenticidade")
+        codigo_input = st.text_input("Digite o código de verificação")
+        if st.button("🔍 Verificar Código"):
+            if codigo_input:
+                if verificar_codigo_google_sheets(codigo_input):
+                    st.success("✅ Documento Autêntico!")
+                else:
+                    st.error("❌ Código inválido.")
+            else:
+                st.warning("Por favor, insira um código.")
+                
+        st.markdown("---")
+        st.subheader("💚 Apoie o Projeto")
+        payload = "00020126400014br.gov.bcb.pix0118pesas8810@gmail.com520400005303986540520.005802BR5925PEDRO EMILIO AMADOR SALOM6013TEOFILO OTONI62200516PEASTECHNOLOGIES6304C9DB"
+        qr_img = qrcode.make(payload)
+        buf = BytesIO()
+        qr_img.save(buf, format="PNG")
+        st.image(buf.getvalue(), caption="Pix para PEAS TECHNOLOGIES (R$ 20,00)", width=150)
+
+    # --- Área Principal ---
+    st.markdown('<div class="glass-card"><h3>1. Preencha seus dados e envie o documento</h3></div>', unsafe_allow_html=True)
+    nome = st.text_input("Nome completo")
+    email = st.text_input("E-mail")
+    arquivo_pdf = st.file_uploader("📄 Envie o artigo em PDF", type=["pdf"])
+
+    if st.button("🚀 Analisar Documento"):
+        if not nome or not email:
+            st.warning("⚠️ Por favor, preencha seu nome e e-mail.")
+        elif not arquivo_pdf:
+            st.warning("⚠️ Por favor, envie um arquivo PDF.")
+        elif st.session_state["consultas"] >= 4:
+            st.error("❌ Limite de consultas atingido. Recarregue a página para reiniciar.")
         else:
-            st.
+            with st.spinner("Analisando seu documento... Isso pode levar alguns instantes."):
+                texto_extraido = extrair_texto_pdf(arquivo_pdf)
+                texto_usuario = limpar_texto(texto_extraido)
+                
+                if not texto_usuario:
+                    st.error("❌ Não foi possível extrair conteúdo válido do PDF. Verifique se o texto é selecionável.")
+                else:
+                    referencias = buscar_referencias_crossref(texto_usuario)
+                    referencias_sim = []
+                    for ref in referencias:
+                        base = ref["titulo"] + " " + ref["resumo"]
+                        sim = calcular_similaridade_robusta(texto_usuario, base)
+                        referencias_sim.append((ref["titulo"], sim, ref["link"], ref["doi"], ref["ano"]))
+                    
+                    referencias_sim.sort(key=lambda x: x[1], reverse=True)
+                    codigo = gerar_codigo_verificacao(texto_usuario)
+                    salvar_email_google_sheets(nome, email, codigo)
+                    
+                    st.success(f"✅ Análise concluída! Código de verificação: **{codigo}**")
+                    
+                    # Exibir Dashboard de Métricas
+                    st.markdown("### 📊 Dashboard de Resultados")
+                    if referencias_sim:
+                        sims = [r[1] for r in referencias_sim]
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.markdown(f'<div class="metric-container"><div class="metric-value">{len(sims)}</div><div class="metric-label">Referências</div></div>', unsafe_allow_html=True)
+                        c2.markdown(f'<div class="metric-container"><div class="metric-value">{max(sims)*100:.1f}%</div><div class="metric-label">Máxima</div></div>', unsafe_allow_html=True)
+                        c3.markdown(f'<div class="metric-container"><div class="metric-value">{np.mean(sims)*100:.1f}%</div><div class="metric-label">Média</div></div>', unsafe_allow_html=True)
+                        c4.markdown(f'<div class="metric-container"><div class="metric-value">{len([s for s in sims if s > 0.5])}</div><div class="metric-label">Alta Similaridade</div></div>', unsafe_allow_html=True)
+
+                    pdf_bytes = gerar_relatorio_pdf(referencias_sim, nome, email, codigo)
+                    st.download_button("📄 Baixar Relatório Completo em PDF", data=pdf_bytes, file_name="relatorio_plagia.pdf", mime="application/pdf")
+                    
+                    st.session_state["consultas"] += 1
+                    # Usar st.experimental_rerun() ou st.rerun() pode causar problemas se não for a última linha.
+                    # O Streamlit geralmente atualiza a tela automaticamente após o download.
+                    # Se for necessário, descomente a linha abaixo.
+                    # st.rerun()
+
+if __name__ == "__main__":
+    main()
