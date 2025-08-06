@@ -16,7 +16,9 @@ import re
 from collections import Counter
 
 # 🔗 URL da API gerada no Google Sheets
-URL_GOOGLE_SHEETS = "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
+URL_GOOGLE_SHEETS = (
+    "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
+)
 
 # =============================
 # 📋 Funções Auxiliares
@@ -30,6 +32,7 @@ def salvar_email_google_sheets(nome, email, codigo_verificacao):
     except:
         return False
 
+
 def verificar_codigo_google_sheets(codigo_digitado):
     try:
         response = requests.get(f"{URL_GOOGLE_SHEETS}?codigo={codigo_digitado}")
@@ -37,8 +40,10 @@ def verificar_codigo_google_sheets(codigo_digitado):
     except:
         return False
 
+
 def gerar_codigo_verificacao(texto):
     return hashlib.md5(texto.encode()).hexdigest()[:10].upper()
+
 
 def extrair_texto_pdf(arquivo_pdf):
     leitor_pdf = PyPDF2.PdfReader(arquivo_pdf)
@@ -47,6 +52,7 @@ def extrair_texto_pdf(arquivo_pdf):
         texto += pagina.extract_text() or ""
     return texto.strip()
 
+
 def limpar_texto(texto_bruto):
     linhas = texto_bruto.splitlines()
     linhas_filtradas = []
@@ -54,32 +60,24 @@ def limpar_texto(texto_bruto):
     capturar = False
     for linha in linhas:
         linha = linha.strip()
-        if not linha:
-            continue
-        if len(linha) < 5:
-            continue
-        if contagem[linha] > 3:
+        if not linha or len(linha) < 5 or contagem[linha] > 3:
             continue
         if re.match(r"^Página?\s*\d+$", linha, re.IGNORECASE):
             continue
         if "doi" in linha.lower() and len(linha) < 50:
             continue
-
-        # Ativar captura somente após o início do corpo (após "Resumo")
         if re.search(r"\bResumo\b", linha, re.IGNORECASE):
             capturar = True
-
         if capturar:
             linhas_filtradas.append(linha)
-
-        # Opcional: interromper ao detectar "Referências" ou similar
         if re.search(r"\bRefer[eê]ncias\b|\bBibliografia\b", linha, re.IGNORECASE):
             break
-
     return " ".join(linhas_filtradas)
+
 
 def calcular_similaridade(texto1, texto2):
     return difflib.SequenceMatcher(None, texto1, texto2).ratio()
+
 
 def buscar_referencias_crossref(texto):
     query = "+".join(texto.split()[:10])
@@ -96,8 +94,9 @@ def buscar_referencias_crossref(texto):
     except:
         return []
 
+
 def gerar_qr_code_pix(payload):
-    qr = qrcode.QRCode(box_size=10, border=4)
+    qr = qrcode.QRCode(box_size=5, border=2)
     qr.add_data(payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -105,6 +104,7 @@ def gerar_qr_code_pix(payload):
     img.save(buffer, format="PNG")
     buffer.seek(0)
     return Image.open(buffer)
+
 
 # =============================
 # 📄 Classe PDF com encode seguro
@@ -130,6 +130,7 @@ class PDF(FPDF):
         except UnicodeEncodeError:
             return ''.join(char if ord(char) < 128 else '?' for char in text)
 
+
 def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verificacao):
     pdf = PDF()
     pdf.add_page()
@@ -154,15 +155,83 @@ def gerar_relatorio_pdf(referencias_com_similaridade, nome, email, codigo_verifi
     pdf.output(caminho, 'F')
     return caminho
 
+
 # =============================
 # 💻 Interface do Streamlit
 # =============================
 
+# Custom CSS for enhanced UX
 st.markdown("""
     <style>
-    .stButton>button { background-color: #198754; color: white; font-weight: bold; border-radius: 8px; }
-    .stTextInput>div>div>input { border: 1px solid #198754; border-radius: 5px; }
-    .stDownloadButton button { background-color: #198754; color: white; border-radius: 6px; }
+    /* Global background */
+    .reportview-container, .main {
+        background-color: #f8f9fa;
+        color: #333;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    /* Title Styling */
+    .css-12oz5g7 h1 { /* adjust selector per Streamlit version */
+        color: #155724 !important;
+        font-size: 2.5rem;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    /* Button Styling */
+    .stButton>button, .stDownloadButton>button {
+        background-color: #198754 !important;
+        color: white !important;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.6rem 1.2rem;
+        transition: background-color 0.3s ease;
+    }
+    .stButton>button:hover, .stDownloadButton>button:hover {
+        background-color: #146c43 !important;
+    }
+    /* Input fields */
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+        border: 1px solid #198754 !important;
+        border-radius: 5px;
+        padding: 0.5rem;
+    }
+    /* File uploader */
+    .stFileUploader>div {
+        border: 2px dashed #198754 !important;
+        border-radius: 5px;
+        padding: 1rem;
+        background-color: white;
+    }
+    /* Section separators */
+    hr {
+        border: 0;
+        border-top: 1px solid #dee2e6;
+        margin: 1.5rem 0;
+    }
+    /* Subheaders */
+    .css-1fcdlhj h2, .css-1e5imcs h2 {
+        color: #155724 !important;
+        font-size: 1.4rem;
+        margin-top: 1.2rem;
+    }
+    /* Notifications */
+    .stSuccess, .stError, .stWarning {
+        border-radius: 5px;
+        padding: 0.75rem;
+    }
+    /* Pix donation section */
+    .pix-section {
+        background-color: #e9f7ef;
+        border-radius: 5px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    .pix-section h3 {
+        color: #155724;
+        margin-bottom: 0.5rem;
+    }
+    .pix-section p {
+        margin: 0.25rem 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -215,14 +284,21 @@ if st.button("🔍 Verificar Código"):
 
 st.markdown("---")
 
-payload = "00020126400014br.gov.bcb.pix0118pesas8810@gmail.com520400005303986540520.005802BR5925PEDRO EMILIO AMADOR SALOM6013TEOFILO OTONI62200516PEASTECHNOLOGIES6304C9DB"
-
-st.markdown(f"""
-<h3 style='color: green;'>🍀 Apoie Este Projeto com um Pix!</h3>
-<p>Com sua doação de <strong>R$ 20,00</strong>, você ajuda a manter o projeto gratuito e acessível.</p>
-<p><strong>Chave Pix:</strong> <span style='color: blue;'>pesas8810@gmail.com</span></p>
-<p><strong>Nome do recebedor:</strong> PEAS TECHNOLOGIES</p>
-""", unsafe_allow_html=True)
+# Pix Donation Section
+payload = (
+    "00020126400014br.gov.bcb.pix0118pesas8810@gmail.com520400005303986540520.005802BR5925PEDRO EMILIO AMADOR SALOM6013TEOFILO OTONI62200516PEASTECHNOLOGIES6304C9DB"
+)
+st.markdown(
+    """
+    <div class="pix-section">
+        <h3>🍀 Apoie Este Projeto com um Pix!</h3>
+        <p>Com sua doação de <strong>R$ 20,00</strong>, você ajuda a manter o projeto gratuito e acessível.</p>
+        <p><strong>Chave Pix:</strong> <span style='color: blue;'>pesas8810@gmail.com</span></p>
+        <p><strong>Nome do recebedor:</strong> PEAS TECHNOLOGIES</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 qr_img = gerar_qr_code_pix(payload)
 st.image(qr_img, caption="📲 Escaneie o QR Code para doar via Pix (R$ 20,00)", width=300)
