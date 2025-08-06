@@ -1,7 +1,7 @@
 # ============================================================================
 # 🍀 Sistema PlagIA Professional - Versão Final com Busca Robusta
-# UI/UX moderna, múltiplas fontes de dados (CrossRef, Semantic Scholar)
-# e estratégias de busca em cascata para máxima eficiência.
+# Mantém o design original com um novo motor de busca (CrossRef + Semantic Scholar)
+# e processamento de texto aprimorado para máxima eficiência.
 # PEAS.Co 2024
 # ============================================================================
 
@@ -12,9 +12,10 @@ import difflib
 from fpdf import FPDF
 from io import BytesIO
 import hashlib
-from datetime import datetime
+from datetime import datetime, date
 import qrcode
 import re
+from collections import Counter
 import numpy as np
 import plotly.graph_objects as go
 import time
@@ -25,12 +26,11 @@ import gc
 
 # --- Configuração da Página e Logging ---
 st.set_page_config(
-    page_title="PlagIA Professional - Análise de Similaridade",
-    page_icon="✨",
+    page_title="PlagIA Professional - Detecção Avançada de Plágio",
+    page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -38,121 +38,63 @@ logger = logging.getLogger(__name__)
 URL_GOOGLE_SHEETS = "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
 
 CONFIG = {
-    'MAX_CONSULTAS_SESSAO': 5,
-    'MIN_TEXT_LENGTH': 500,
-    'MAX_TEXT_LENGTH': 60000, # Aumentado para textos maiores
-    'MIN_WORDS': 50,
-    'TIMEOUT_API': 25,
+    'MAX_CONSULTAS_SESSAO': 4,
+    'MIN_TEXT_LENGTH': 700,
+    'MAX_TEXT_LENGTH': 60000,
+    'MIN_WORDS': 500,
+    'TIMEOUT_API': 25,  # Aumentado para maior tolerância
     'MAX_REFS_API': 20,
     'MAX_REFS_ANALISE': 15,
     'CACHE_TTL': 3600,
-    'SIMILARITY_THRESHOLD_HIGH': 0.4,
+    'SIMILARITY_THRESHOLD_HIGH': 0.3,
 }
 
-# --- Estilo CSS Moderno ---
-@st.cache_data(ttl=CONFIG['CACHE_TTL'] )
-def load_modern_css() -> str:
-    """Carrega o CSS otimizado e moderno para a aplicação."""
+# =============================
+# CSS (Mantido do original )
+# =============================
+@st.cache_data(ttl=CONFIG['CACHE_TTL'])
+def load_optimized_css() -> str:
     return """
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' );
-        
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-        }
-        .main .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            max-width: 1300px;
-        }
-        .hero-header {
-            background: linear-gradient(135deg, #6e8efb, #a777e3);
-            padding: 2.5rem;
-            border-radius: 18px;
-            margin-bottom: 2rem;
-            text-align: center;
-            color: white;
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.6);
-            backdrop-filter: blur(5px);
-            border-radius: 18px;
-            padding: 1.5rem 2rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
-        }
-        .metric-card {
-            background: #ffffff;
-            border-radius: 18px;
-            padding: 1.5rem;
-            text-align: center;
-            border: 1px solid #e0e0e0;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .metric-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 20px rgba(0,0,0,0.08);
-        }
-        .metric-value {
-            font-size: 2.2rem;
-            font-weight: 700;
-            color: #6e8efb;
-        }
-        .metric-label {
-            font-size: 0.9rem;
-            color: #555;
-            font-weight: 600;
-        }
-        .stButton>button {
-            border-radius: 12px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 600;
-            width: 100%;
-        }
-        .stDownloadButton>button {
-            background-color: #28a745;
-            color: white;
-        }
-        .sidebar-card {
-            background: #f8f9fa;
-            border-radius: 18px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-        }
-        .usage-counter {
-            text-align: center;
-            font-weight: 600;
-        }
-        .usage-counter.limit-reached {
-            color: #d9534f;
-        }
-        .section-header {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: #333;
-        }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' );
+    .main .block-container{padding-top:1rem;padding-bottom:2rem;max-width:1200px}
+    html,body,[class*="css"]{font-family:'Inter',sans-serif}
+    .hero-header{background:linear-gradient(-45deg,#667eea,#764ba2,#f093fb,#f5576c);background-size:400% 400%;animation:gradientShift 15s ease infinite;padding:2rem;border-radius:20px;margin-bottom:2rem;text-align:center;color:white;box-shadow:0 20px 40px rgba(0,0,0,0.1);position:relative;overflow:hidden}
+    @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+    .glass-card{background:rgba(255,255,255,0.25);backdrop-filter:blur(10px);border-radius:20px;border:1px solid rgba(255,255,255,0.18);padding:2rem;margin:1rem 0;box-shadow:0 8px 32px rgba(31,38,135,0.37);transition:all 0.3s ease}
+    .metric-container{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:15px;padding:1.5rem;color:white;text-align:center;transition:all 0.3s ease;cursor:pointer;margin:0.5rem 0}
+    .metric-container:hover{transform:scale(1.05)}
+    .metric-value{font-size:2.5rem;font-weight:700;margin-bottom:0.5rem}
+    .metric-label{font-size:0.9rem;opacity:0.9;text-transform:uppercase}
+    .usage-counter{background:linear-gradient(135deg,#2196F3,#1976D2);color:white;padding:1rem;border-radius:15px;text-align:center;font-weight:bold;margin-bottom:1rem}
+    .usage-counter.limit-reached{background:linear-gradient(135deg,#f44336,#d32f2f);animation:pulse 2s infinite}
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
+    .stButton>button{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border:none;border-radius:25px;padding:0.75rem 2rem;font-weight:600;transition:all 0.3s ease;box-shadow:0 4px 15px rgba(102,126,234,0.3)}
+    .stButton>button:hover{transform:translateY(-2px)}
+    .stButton>button:disabled{background:#cccccc;transform:none}
+    .sidebar-modern{background:linear-gradient(180deg,#f8f9fa 0%,#e9ecef 100%);border-radius:15px;padding:1.5rem;margin:1rem 0;border-left:4px solid #667eea;box-shadow:0 4px 15px rgba(0,0,0,0.1)}
+    .recommendation-box{background:linear-gradient(135deg,#17a2b8,#138496);color:white;padding:1.5rem;border-radius:12px;margin:1rem 0;border-left:5px solid #0c5460}
     </style>
     """
 
-# --- Funções de Busca Robusta ---
+# =================================================
+# NOVAS FUNÇÕES DE BUSCA ROBUSTA E PROCESSAMENTO
+# =================================================
 
 def extrair_palavras_chave(texto: str, estrategia: int) -> str:
     """Extrai palavras-chave de um texto usando diferentes estratégias."""
     texto_lower = texto.lower()
-    if estrategia == 1:  # Estratégia 1: Palavras mais longas do início do texto
+    if estrategia == 1:
         return " ".join(re.findall(r'\b\w{6,15}\b', texto_lower[:2000])[:15])
-    elif estrategia == 2:  # Estratégia 2: Termos de 2-3 palavras (N-grams)
+    elif estrategia == 2:
         tokens = re.findall(r'\b\w+\b', texto_lower[:2500])
         bigramas = [" ".join(tokens[i:i+2]) for i in range(len(tokens)-1)]
         return " ".join(bigramas[:10])
-    elif estrategia == 3:  # Estratégia 3: Palavras mais frequentes no texto todo
+    elif estrategia == 3:
         palavras = re.findall(r'\b\w{5,}\b', texto_lower)
         if not palavras: return ""
-        contagem = np.unique(palavras, return_counts=True)
-        mais_frequentes = sorted(zip(contagem[0], contagem[1]), key=lambda x: x[1], reverse=True)
-        return " ".join([p[0] for p in mais_frequentes if p[0] not in ['artigo', 'estudo', 'trabalho']][:12])
+        contagem = Counter(p for p in palavras if p not in ['artigo', 'estudo', 'trabalho', 'neste', 'nesta'])
+        return " ".join([p[0] for p in contagem.most_common(12)])
     return ""
 
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
@@ -160,7 +102,7 @@ def buscar_crossref(query: str) -> List[Dict]:
     """Busca na API da CrossRef."""
     if not query: return []
     url = f"https://api.crossref.org/works?query.bibliographic={requests.utils.quote(query )}&rows={CONFIG['MAX_REFS_API']}&sort=relevance"
-    headers = {'User-Agent': 'PlagIA/4.0 (mailto:contato@peas.co)'}
+    headers = {'User-Agent': 'PlagIA/5.0 (mailto:contato@peas.co)'}
     try:
         r = requests.get(url, headers=headers, timeout=CONFIG['TIMEOUT_API'])
         r.raise_for_status()
@@ -180,16 +122,16 @@ def buscar_crossref(query: str) -> List[Dict]:
                 'resumo': item.get('abstract', ''),
                 'link': item.get('URL', ''),
                 'doi': item.get('DOI', ''),
-                'ano': ano
+                'ano': str(ano)
             })
         return referencias
     except requests.RequestException as e:
-        logger.warning(f"API CrossRef falhou para query '{query[:30]}...': {e}")
+        logger.warning(f"API CrossRef falhou: {e}")
         return []
 
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
 def buscar_semantic_scholar(query: str) -> List[Dict]:
-    """Busca na API do Semantic Scholar e formata a saída para ser compatível."""
+    """Busca na API do Semantic Scholar."""
     if not query: return []
     url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={requests.utils.quote(query )}&limit={CONFIG['MAX_REFS_API']}&fields=title,abstract,year,url,externalIds"
     try:
@@ -197,22 +139,19 @@ def buscar_semantic_scholar(query: str) -> List[Dict]:
         r.raise_for_status()
         results = r.json().get('data', [])
         
-        referencias_formatadas = []
-        for item in results:
-            referencias_formatadas.append({
-                'titulo': item.get('title', ''),
-                'resumo': item.get('abstract', ''),
-                'link': item.get('url', ''),
-                'doi': item.get('externalIds', {}).get('DOI', ''),
-                'ano': item.get('year', '')
-            })
-        return referencias_formatadas
+        return [{
+            'titulo': item.get('title', ''),
+            'resumo': item.get('abstract', ''),
+            'link': item.get('url', ''),
+            'doi': item.get('externalIds', {}).get('DOI', ''),
+            'ano': str(item.get('year', ''))
+        } for item in results]
     except requests.RequestException as e:
-        logger.warning(f"API Semantic Scholar falhou para query '{query[:30]}...': {e}")
+        logger.warning(f"API Semantic Scholar falhou: {e}")
         return []
 
 def buscar_referencias_robusto(texto: str, status_placeholder) -> List[Dict]:
-    """Executa uma busca robusta em cascata, usando múltiplas estratégias e fontes."""
+    """Executa uma busca em cascata, usando múltiplas estratégias e fontes."""
     fontes = [
         ("CrossRef", buscar_crossref),
         ("Semantic Scholar", buscar_semantic_scholar)
@@ -220,255 +159,313 @@ def buscar_referencias_robusto(texto: str, status_placeholder) -> List[Dict]:
     
     for nome_fonte, funcao_busca in fontes:
         for estrategia in range(1, 4):
-            status_placeholder.info(f"Buscando em '{nome_fonte}' (Estratégia de busca #{estrategia})...")
+            status_placeholder.text(f"🔎 Buscando em '{nome_fonte}' (Estratégia #{estrategia})...")
             query = extrair_palavras_chave(texto, estrategia=estrategia)
             
-            if not query:
-                logger.info(f"Estratégia #{estrategia} não gerou query para o texto.")
-                continue
+            if not query: continue
 
             referencias = funcao_busca(query)
             
             if referencias:
-                logger.info(f"Sucesso! {len(referencias)} referências encontradas em '{nome_fonte}' com a estratégia #{estrategia}.")
+                logger.info(f"Sucesso! {len(referencias)} refs em '{nome_fonte}' com estratégia #{estrategia}.")
                 return referencias
     
-    logger.warning("Nenhuma referência encontrada após todas as estratégias e fontes.")
+    logger.warning("Nenhuma referência encontrada em nenhuma fonte/estratégia.")
     return []
 
-# --- Funções Auxiliares e de Negócio ---
+@lru_cache(maxsize=64)
+def limpar_texto_otimizado(texto_bruto: str) -> str:
+    """Limpeza de texto aprimorada para focar no conteúdo principal."""
+    if not texto_bruto: return ""
+    
+    # Remove tudo após as referências bibliográficas
+    texto_sem_refs = re.split(r'\n\s*(Refer[eê]ncias|Bibliografia|References)\s*\n', texto_bruto, flags=re.IGNORECASE)[0]
+    
+    # Remove URLs e normaliza espaços
+    texto_limpo = re.sub(r'http\S+', '', texto_sem_refs )
+    texto_limpo = re.sub(r'[^a-zA-Z0-9\s.,-]', ' ', texto_limpo)
+    texto_limpo = re.sub(r'\s+', ' ', texto_limpo)
+    
+    return texto_limpo.strip()
+
+# =================================================
+# FUNÇÕES AUXILIARES (Mantidas do original com pequenas adaptações)
+# =================================================
+
+@st.cache_data(ttl=CONFIG['CACHE_TTL'])
+def gerar_codigo_verificacao(texto: str) -> str:
+    timestamp = str(int(time.time()))
+    combined = texto[:1000] + timestamp
+    return hashlib.md5(combined.encode('utf-8', 'ignore')).hexdigest()[:10].upper()
+
+@lru_cache(maxsize=128)
+def validar_texto_robusto(texto: str) -> Tuple[bool, str]:
+    if not texto or not isinstance(texto, str):
+        return False, "Texto inválido ou vazio"
+    texto_limpo = texto.strip()
+    if len(texto_limpo) < CONFIG['MIN_TEXT_LENGTH']:
+        return False, f"Texto muito curto. Mínimo de {CONFIG['MIN_TEXT_LENGTH']} caracteres. Atual: {len(texto_limpo)}"
+    if len(texto_limpo) > CONFIG['MAX_TEXT_LENGTH']:
+        return False, f"Texto muito longo. Máximo de {CONFIG['MAX_TEXT_LENGTH']} caracteres permitidos"
+    palavras = len(texto_limpo.split())
+    if palavras < CONFIG['MIN_WORDS']:
+        return False, f"Texto com poucas palavras. Mínimo de {CONFIG['MIN_WORDS']} palavras. Atual: {palavras}"
+    return True, "Texto válido"
 
 @st.cache_data(show_spinner=False)
-def extrair_texto_pdf(arquivo_pdf) -> str:
-    """Extrai texto de um arquivo PDF de forma otimizada."""
+def extrair_texto_pdf_otimizado(arquivo_pdf) -> str:
     try:
         leitor = PyPDF2.PdfReader(arquivo_pdf)
         texto_completo = "".join(page.extract_text() or "" for page in leitor.pages)
         return texto_completo
     except Exception as e:
-        logger.error(f"Falha ao extrair texto do PDF: {e}")
+        logger.error(f"Erro ao extrair PDF: {e}")
         return ""
 
-@lru_cache(maxsize=64)
-def limpar_texto(texto_bruto: str) -> str:
-    """Limpeza de texto aprimorada para remover ruídos e focar no conteúdo."""
-    if not texto_bruto: return ""
-    
-    # 1. Remove cabeçalhos e rodapés que se repetem com frequência
-    linhas = texto_bruto.splitlines()
-    contagem_linhas = {linha.strip(): linhas.count(linha) for linha in set(linhas) if 10 < len(linha.strip()) < 100}
-    linhas_repetidas = [linha for linha, cont in contagem_linhas.items() if cont > 2]
-    
-    texto_sem_repeticao = "\n".join([l for l in linhas if l.strip() not in linhas_repetidas])
+def salvar_email_google_sheets_otimizado(nome: str, email: str, codigo: str) -> bool:
+    dados = {"nome": nome[:100], "email": email[:100], "codigo": codigo, "data": str(date.today())}
+    try:
+        res = requests.post(URL_GOOGLE_SHEETS, json=dados, headers={'Content-Type': 'application/json'}, timeout=CONFIG['TIMEOUT_API'])
+        return res.text.strip() == "Sucesso"
+    except Exception as e:
+        logger.error(f"Erro Sheets: {e}")
+        return False
 
-    # 2. Remove tudo após as referências bibliográficas
-    texto_sem_refs = re.split(r'\n\s*(Refer[eê]ncias|Bibliografia|References)\s*\n', texto_sem_repeticao, flags=re.IGNORECASE)[0]
-    
-    # 3. Normalização final
-    texto_limpo = re.sub(r'http\S+', '', texto_sem_refs ) # Remove URLs
-    texto_limpo = re.sub(r'[^a-zA-Z0-9\s.,-]', ' ', texto_limpo) # Remove caracteres especiais
-    texto_limpo = re.sub(r'\s+', ' ', texto_limpo) # Normaliza espaços em branco
-    
-    return texto_limpo.strip()
-
-@lru_cache(maxsize=128)
-def validar_texto(texto: str) -> Tuple[bool, str]:
-    """Validação robusta do texto extraído."""
-    if not isinstance(texto, str) or not texto.strip():
-        return False, "Texto inválido ou vazio."
-    
-    length = len(texto.strip())
-    if length < CONFIG['MIN_TEXT_LENGTH']:
-        return False, f"Texto muito curto. Mínimo de {CONFIG['MIN_TEXT_LENGTH']} caracteres (encontrados: {length})."
-    if length > CONFIG['MAX_TEXT_LENGTH']:
-        return False, f"Texto muito longo. Máximo de {CONFIG['MAX_TEXT_LENGTH']} caracteres."
-        
-    palavras = len(texto.strip().split())
-    if palavras < CONFIG['MIN_WORDS']:
-        return False, f"Texto com poucas palavras. Mínimo de {CONFIG['MIN_WORDS']} (encontradas: {palavras})."
-        
-    return True, "Texto válido."
+def verificar_codigo_google_sheets_otimizado(codigo: str) -> bool:
+    try:
+        res = requests.get(f"{URL_GOOGLE_SHEETS}?codigo={codigo}", timeout=CONFIG['TIMEOUT_API'])
+        return res.text.strip() == "Valido"
+    except Exception as e:
+        logger.error(f"Erro verificar código: {e}")
+        return False
 
 @lru_cache(maxsize=256)
-def calcular_similaridade(texto1: str, texto2: str) -> float:
-    """Calcula a similaridade entre dois textos usando SequenceMatcher."""
+def calcular_similaridade_otimizada(texto1: str, texto2: str) -> float:
     if not texto1 or not texto2: return 0.0
-    return difflib.SequenceMatcher(None, texto1, texto2).ratio()
+    # Limita o tamanho dos textos para evitar sobrecarga no difflib
+    t1 = texto1.lower()[:5000]
+    t2 = texto2.lower()[:5000]
+    return difflib.SequenceMatcher(None, t1, t2).ratio()
 
-# --- Geração de Relatório PDF e Outras Funções ---
-# (As funções de geração de PDF, salvamento no Google Sheets, etc., permanecem as mesmas da versão anterior)
-# ...
+# =============================
+# Classe PDF (Mantida do original)
+# =============================
+class PDFOtimizado(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.set_auto_page_break(auto=True, margin=15)
 
-# --- Componentes da Interface (UI) ---
-# (As funções de UI como exibir_dashboard_resultados permanecem as mesmas)
-# ...
+    def header(self):
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, self._encode_text("Relatório PlagIA Professional - PEAS.Co"), ln=True, align='C')
+        self.ln(3)
 
-# --- Função Principal da Aplicação ---
-def main():
-    st.markdown(load_modern_css(), unsafe_allow_html=True)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
 
-    # --- Inicialização do Estado da Sessão ---
-    if "consultas" not in st.session_state:
-        st.session_state.consultas = 0
-    if "processando" not in st.session_state:
-        st.session_state.processando = False
-    if "resultados" not in st.session_state:
-        st.session_state.resultados = None
-    if "pdf_bytes" not in st.session_state:
-        st.session_state.pdf_bytes = None
-    if "codigo_gerado" not in st.session_state:
-        st.session_state.codigo_gerado = ""
+    def add_section(self, title: str, content: str):
+        if title:
+            self.set_font('Arial', 'B', 12)
+            self.cell(0, 8, self._encode_text(title), ln=True)
+        self.set_font('Arial', '', 10)
+        self.multi_cell(0, 6, self._encode_text(content))
+        self.ln(3)
 
-    # --- Sidebar ---
-    with st.sidebar:
-        st.markdown('<div class="sidebar-card"><h3>⚙️ Painel de Controle</h3></div>', unsafe_allow_html=True)
+    def _encode_text(self, text: str) -> str:
+        return str(text).encode('latin-1', 'replace').decode('latin-1')
+
+def gerar_relatorio_otimizado(referencias_sim: List, nome: str, email: str, codigo: str) -> Optional[bytes]:
+    try:
+        pdf = PDFOtimizado()
+        pdf.add_page()
+        dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        pdf.add_section("Dados do Solicitante", f"Nome: {nome}\nE-mail: {email}\nData: {dt}\nCódigo: {codigo}")
         
-        consultas_restantes = CONFIG['MAX_CONSULTAS_SESSAO'] - st.session_state.consultas
-        limit_class = "limit-reached" if consultas_restantes <= 0 else ""
-        st.markdown(f"""
-            <div class="sidebar-card">
-                <div class="usage-counter {limit_class}">
-                    <h4>Consultas na Sessão</h4>
-                    <h2>{st.session_state.consultas} / {CONFIG['MAX_CONSULTAS_SESSAO']}</h2>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+        if referencias_sim:
+            total = len(referencias_sim)
+            max_s = max(r[1] for r in referencias_sim) * 100
+            avg_s = np.mean([r[1] for r in referencias_sim]) * 100
+            stats = f"Total de Referências Encontradas: {total}\nSimilaridade Máxima: {max_s:.2f}%\nSimilaridade Média: {avg_s:.2f}%"
+            pdf.add_section("Estatísticas da Análise", stats)
+            
+            pdf.add_section("Top 10 Referências com Maior Similaridade", "")
+            for i, (t, s, link, doi, ano) in enumerate(referencias_sim[:10], 1):
+                link_final = f"https://doi.org/{doi}" if doi else link
+                txt = (f"{i}. {t}\nAno: {ano or 'N/A'}\nSimilaridade: {s*100:.2f}%\nLink: {link_final or 'N/A'}" )
+                pdf.add_section("", txt)
+        else:
+            pdf.add_section("Resultado", "Nenhuma referência com similaridade significativa foi encontrada.")
+        
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception as e:
+        logger.error(f"Erro ao gerar PDF: {e}")
+        return None
 
-        st.markdown("---")
+# =============================
+# Visualizações (Mantidas do original)
+# =============================
+@st.cache_data(ttl=CONFIG['CACHE_TTL'])
+def criar_grafico_barras_otimizado(referencias_sim: List) -> Optional[go.Figure]:
+    if not referencias_sim: return None
+    refs = referencias_sim[:10]
+    nomes = [r[0][:40] + ("..." if len(r[0]) > 40 else "") for r in refs]
+    sims = [r[1] * 100 for r in refs]
+    fig = go.Figure(data=[go.Bar(x=sims, y=nomes, orientation='h', marker=dict(color=sims, colorscale='RdYlBu_r', showscale=True))])
+    fig.update_layout(title="Top 10 Referências por Similaridade", xaxis_title="Similaridade (%)", height=400, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
+    return fig
+
+def exibir_metricas_otimizadas(referencias_sim: List):
+    if not referencias_sim:
+        st.warning("Nenhuma referência encontrada para análise.")
+        return
+    sims = [r[1] for r in referencias_sim]
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(f'<div class="metric-container"><div class="metric-value">{len(sims)}</div><div class="metric-label">Total Referências</div></div>', unsafe_allow_html=True)
+    with c2:
+        mval = max(sims) * 100 if sims else 0
+        st.markdown(f'<div class="metric-container"><div class="metric-value">{mval:.1f}%</div><div class="metric-label">Máxima</div></div>', unsafe_allow_html=True)
+    with c3:
+        aval = np.mean(sims) * 100 if sims else 0
+        st.markdown(f'<div class="metric-container"><div class="metric-value">{aval:.1f}%</div><div class="metric-label">Média</div></div>', unsafe_allow_html=True)
+    with c4:
+        high_count = len([x for x in sims if x > CONFIG['SIMILARITY_THRESHOLD_HIGH']])
+        st.markdown(f'<div class="metric-container"><div class="metric-value">{high_count}</div><div class="metric-label">Alta Similaridade</div></div>', unsafe_allow_html=True)
+
+# =============================
+# Interface Principal (Adaptada para o novo fluxo)
+# =============================
+def main():
+    st.markdown(load_optimized_css(), unsafe_allow_html=True)
+    st.markdown("""<div class="hero-header"><h1 style="font-size:2.5rem;margin-bottom:0.5rem;">🔍 PlagIA Professional</h1><p style="font-size:1rem;margin:0;">Sistema Otimizado de Detecção de Plágio</p></div>""", unsafe_allow_html=True)
+
+    if "consultas" not in st.session_state: st.session_state["consultas"] = 0
+    if "historico" not in st.session_state: st.session_state["historico"] = []
+
+    with st.sidebar:
+        st.markdown("""<div class="sidebar-modern"><h3>📊 Painel de Controle</h3></div>""", unsafe_allow_html=True)
+        rest = CONFIG['MAX_CONSULTAS_SESSAO'] - st.session_state["consultas"]
+        cls = "limit-reached" if rest <= 0 else ""
+        st.markdown(f"""<div class="usage-counter {cls}"><h4>Consultas Restantes</h4><h2>{rest}/{CONFIG['MAX_CONSULTAS_SESSAO']}</h2></div>""", unsafe_allow_html=True)
+        if st.session_state["historico"]:
+            st.markdown("### 📋 Histórico")
+            for item in st.session_state["historico"][-3:]:
+                st.markdown(f"**{item['nome'][:20]}...** - {item['timestamp']}")
+        
         pix_key = "pesas8810@gmail.com"
         img_qr = qrcode.make(f"pix:{pix_key}")
         buf = BytesIO()
         img_qr.save(buf, format="PNG")
-        st.image(buf.getvalue(), caption="💚 Apoie o Projeto com um Pix", width=150)
-        st.info(f"**Chave Pix:** `{pix_key}`")
+        st.image(buf.getvalue(), caption="💚 Apoie o Projeto via Pix", width=120)
+        st.markdown(f"**Chave Pix:** {pix_key}")
 
-    # --- Layout Principal ---
-    st.markdown('<div class="hero-header"><h1>✨ PlagIA Professional</h1><p>Análise de Similaridade de Documentos com IA</p></div>', unsafe_allow_html=True)
-
-    col1, col2 = st.columns([0.6, 0.4])
-
+    col1, col2 = st.columns([2, 1])
     with col1:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown('<p class="section-header">1. Preencha seus dados e envie o documento</p>', unsafe_allow_html=True)
-        
-        nome = st.text_input("Seu Nome Completo", placeholder="Ex: Ana da Silva")
-        email = st.text_input("Seu E-mail", placeholder="Ex: ana.silva@email.com")
-        arquivo_pdf = st.file_uploader("Selecione o artigo em formato PDF", type=["pdf"])
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("""<div class="glass-card"><h3>📝 Registro do Usuário</h3></div>""", unsafe_allow_html=True)
+        nome = st.text_input("Nome completo", placeholder="Digite seu nome completo")
+        email = st.text_input("E-mail", placeholder="Digite seu e-mail")
+        st.markdown("""<div class="glass-card"><h3>📄 Upload do Documento</h3></div>""", unsafe_allow_html=True)
+        arquivo_pdf = st.file_uploader("Envie o artigo em PDF", type=["pdf"])
+        processar = st.button("🚀 Analisar Documento", disabled=(rest <= 0))
 
     with col2:
-        st.markdown('<div class="glass-card" style="height: 100%;">', unsafe_allow_html=True)
-        st.markdown('<p class="section-header">ℹ️ Informações</p>', unsafe_allow_html=True)
-        st.info(f"""
-        - **Mínimo:** {CONFIG['MIN_WORDS']} palavras e {CONFIG['MIN_TEXT_LENGTH']} caracteres.
-        - **Formato:** PDF com texto selecionável.
-        - **Análise:** Compara o texto com bases de dados acadêmicas globais.
-        """)
+        st.markdown("""<div class="glass-card"><h3>ℹ️ Sistema</h3><p><strong>Versão:</strong> Robusta 5.0</p><p><strong>Fontes:</strong> CrossRef, Semantic Scholar</p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="recommendation-box"><h4>📋 Requisitos</h4><ul><li>Mínimo {CONFIG['MIN_TEXT_LENGTH']} caracteres</li><li>Mínimo {CONFIG['MIN_WORDS']} palavras</li><li>PDF com texto selecionável</li></ul></div>""", unsafe_allow_html=True)
+
+    if processar:
+        if not nome or not email: st.error("⚠️ Por favor, preencha nome e e-mail."); return
+        if not arquivo_pdf: st.error("⚠️ Por favor, envie um arquivo PDF."); return
+        if rest <= 0: st.error("❌ Limite de consultas atingido."); return
         
-        analisar_btn = st.button("🚀 Iniciar Análise do Documento", disabled=(consultas_restantes <= 0 or st.session_state.processando))
-        st.markdown("</div>", unsafe_allow_html=True)
+        container = st.container()
+        with container:
+            bar = st.progress(0, text="Iniciando análise...")
+            status = st.empty()
+            try:
+                status.text("🔄 Extraindo texto do PDF..."); bar.progress(10)
+                texto_bruto = extrair_texto_pdf_otimizado(arquivo_pdf)
+                if not texto_bruto: st.error("❌ Não foi possível extrair texto do PDF."); return
 
-    # --- Lógica de Processamento ---
-    if analisar_btn:
-        if not nome or not email or not arquivo_pdf:
-            st.error("⚠️ Por favor, preencha todos os campos e envie um arquivo PDF.")
-        elif consultas_restantes <= 0:
-            st.error("❌ Você atingiu o limite de consultas para esta sessão.")
-        else:
-            st.session_state.processando = True
-            st.session_state.resultados = None
-            st.session_state.pdf_bytes = None
-            st.rerun()
+                status.text("🧹 Processando e limpando o texto..."); bar.progress(25)
+                texto_limpo = limpar_texto_otimizado(texto_bruto)
+                ok, msg = validar_texto_robusto(texto_limpo)
+                if not ok: st.error(f"❌ Texto inválido após limpeza: {msg}"); return
 
-    if st.session_state.processando:
-        status_placeholder = st.empty()
-        with st.spinner("Analisando seu documento..."):
-            status_placeholder.info("Passo 1/5: Extraindo texto do PDF...")
-            texto_bruto = extrair_texto_pdf(arquivo_pdf)
-            valido, msg = validar_texto(texto_bruto)
-            if not valido:
-                st.error(f"❌ Erro na validação do PDF: {msg}")
-                st.session_state.processando = False
-                st.rerun()
+                bar.progress(40)
+                referencias = buscar_referencias_robusto(texto_limpo, status)
+                
+                if not referencias:
+                    st.warning("⚠️ Nenhuma referência encontrada, mesmo após busca extensiva. O documento pode ser original ou o tópico não está indexado.")
+                    st.session_state['consultas'] += 1
+                    container.empty(); return
 
-            status_placeholder.info("Passo 2/5: Limpando e preparando o texto...")
-            texto_limpo = limpar_texto(texto_bruto)
-            valido, msg = validar_texto(texto_limpo)
-            if not valido:
-                st.error(f"❌ Erro após limpeza do texto: {msg}")
-                st.session_state.processando = False
-                st.rerun()
+                status.text("📊 Calculando similaridades..."); bar.progress(75)
+                resultados = []
+                for r in referencias[:CONFIG['MAX_REFS_ANALISE']]:
+                    base = f"{r['titulo']} {r['resumo']}"
+                    sim = calcular_similaridade_otimizada(texto_limpo, base)
+                    if sim > 0.05: # Filtro de similaridade mínima
+                        resultados.append((r['titulo'], sim, r['link'], r['doi'], r['ano']))
+                
+                resultados.sort(key=lambda x: x[1], reverse=True)
+                
+                status.text("✅ Gerando resultados finais..."); bar.progress(90)
+                codigo = gerar_codigo_verificacao(texto_limpo)
+                salvar_email_google_sheets_otimizado(nome, email, codigo)
+                st.session_state['historico'].append({'nome': nome, 'timestamp': datetime.now().strftime('%H:%M'), 'codigo': codigo})
+                
+                pdf_bytes = gerar_relatorio_otimizado(resultados, nome, email, codigo)
+                
+                bar.progress(100); time.sleep(0.5)
+                container.empty()
+                
+                st.success(f"✅ Análise concluída! Código de verificação: **{codigo}**")
+                st.markdown("### 📊 Resultados da Análise")
+                exibir_metricas_otimizadas(resultados)
+                
+                if resultados:
+                    with st.expander("📈 Visualização Detalhada dos Resultados", expanded=True):
+                        fig = criar_grafico_barras_otimizado(resultados)
+                        if fig: st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.markdown("### 📋 Top 10 Referências Encontradas")
+                    import pandas as pd
+                    df_data = [{
+                        '#': i+1,
+                        'Título': ref[0][:60] + ('...' if len(ref[0])>60 else ''),
+                        'Similaridade': f"{ref[1]*100:.1f}%",
+                        'Ano': ref[4] or 'N/A'
+                    } for i, ref in enumerate(resultados[:10])]
+                    st.dataframe(pd.DataFrame(df_data), use_container_width=True, hide_index=True)
+                
+                if pdf_bytes:
+                    st.download_button("📄 Baixar Relatório Completo em PDF", pdf_bytes, "relatorio_plagia.pdf", "application/pdf")
+                
+                st.session_state['consultas'] += 1
+                gc.collect()
 
-            status_placeholder.info("Passo 3/5: Iniciando busca robusta de referências...")
-            referencias = buscar_referencias_robusto(texto_limpo, status_placeholder)
-            
-            if not referencias:
-                st.warning("⚠️ Nenhuma referência correspondente encontrada, mesmo após busca extensiva. O documento pode ser altamente original ou tratar de um tópico não indexado nas bases de dados consultadas.")
-                st.session_state.processando = False
-                st.session_state.consultas += 1
-                st.rerun()
+            except Exception as e:
+                logger.error(f"Erro fatal no processamento: {e}", exc_info=True)
+                st.error(f"❌ Ocorreu um erro inesperado durante o processamento. Tente novamente.")
+                container.empty()
 
-            status_placeholder.info(f"Passo 4/5: Calculando similaridade com {len(referencias)} referências...")
-            resultados_finais = []
-            for ref in referencias[:CONFIG['MAX_REFS_ANALISE']]:
-                texto_base = f"{ref.get('titulo', '')} {ref.get('resumo', '')}"
-                sim = calcular_similaridade(texto_limpo, texto_base)
-                if sim > 0.05: # Filtro de similaridade mínima
-                    resultados_finais.append((ref.get('titulo', ''), sim, ref.get('link', ''), ref.get('doi', ''), ref.get('ano', '')))
-            
-            resultados_finais.sort(key=lambda x: x[1], reverse=True)
-            st.session_state.resultados = resultados_finais
-
-            status_placeholder.info("Passo 5/5: Gerando relatório final...")
-            # st.session_state.codigo_gerado = gerar_codigo_verificacao(texto_limpo)
-            # salvar_registro_google_sheets(nome, email, st.session_state.codigo_gerado)
-            # st.session_state.pdf_bytes = gerar_relatorio_pdf(resultados_finais, nome, email, st.session_state.codigo_gerado)
-            
-            st.session_state.consultas += 1
-            st.session_state.processando = False
-            gc.collect()
-            st.success("Análise concluída!")
-            time.sleep(1)
-            st.rerun()
-
-    # --- Exibição dos Resultados ---
-    if st.session_state.resultados is not None:
-        st.success(f"✅ Análise concluída com sucesso!")
-        # (O código para exibir o dashboard e o botão de download vai aqui, se necessário)
-        # exibir_dashboard_resultados(st.session_state.resultados)
-        # if st.session_state.pdf_bytes:
-        #     st.download_button(...)
+    st.markdown("---")
+    st.markdown("### 🔍 Verificar Autenticidade de Relatório")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        codigo_input = st.text_input("Código de verificação", placeholder="Ex: A1B2C3D4E5", label_visibility="collapsed")
+    with c2:
+        if st.button("Verificar Código"):
+            if codigo_input:
+                with st.spinner("Verificando..."):
+                    if verificar_codigo_google_sheets_otimizado(codigo_input):
+                        st.success("✅ Documento autêntico!")
+                    else:
+                        st.error("❌ Código inválido ou não encontrado.")
+            else:
+                st.warning("Por favor, insira um código.")
 
 if __name__ == "__main__":
-    # Adicionei as funções que faltavam para o código ser autocontido
-    # Você pode precisar ajustar a lógica delas conforme sua necessidade
-    def gerar_codigo_verificacao(texto: str) -> str:
-        return hashlib.md5(texto.encode()).hexdigest()[:10].upper()
-
-    def salvar_registro_google_sheets(nome: str, email: str, codigo: str):
-        logger.info(f"Simulando salvamento: {nome}, {email}, {codigo}")
-        return True
-
-    def gerar_relatorio_pdf(resultados: List, nome: str, email: str, codigo: str) -> Optional[bytes]:
-        logger.info("Simulando geração de PDF.")
-        try:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt="Relatório Simulado", ln=True, align='C')
-            return pdf.output(dest='S').encode('latin-1')
-        except Exception as e:
-            logger.error(f"Erro na simulação de PDF: {e}")
-            return None
-            
-    def exibir_dashboard_resultados(resultados: List):
-        st.markdown('<p class="section-header">📊 Dashboard de Resultados</p>', unsafe_allow_html=True)
-        if not resultados:
-            st.warning("Nenhum resultado para exibir.")
-            return
-        # ... (a lógica completa do dashboard iria aqui)
-        st.write(f"Top resultado: '{resultados[0][0][:50]}...' com similaridade de {resultados[0][1]*100:.1f}%")
-
-
     main()
