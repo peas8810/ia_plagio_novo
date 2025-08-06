@@ -1,6 +1,6 @@
 # =============================
-# 🍀 Sistema PlagIA - Versão Otimizada e Robusta
-# Performance melhorada, cache eficiente e validação robusta
+# 🍀 Sistema PlagIA - v8.0 - Foco em Semantic Scholar
+# Mantém a estrutura original, substituindo a busca CrossRef por Semantic Scholar.
 # PEAS.Co 2024
 # =============================
 
@@ -37,7 +37,7 @@ st.set_page_config(
 # 🔗 URL da API gerada no Google Sheets
 URL_GOOGLE_SHEETS = (
     "https://script.google.com/macros/s/AKfycbyTpbWDxWkNRh_ZIlHuAVwZaCC2ODqTmo0Un7ZDbgzrVQBmxlYYKuoYf6yDigAPHZiZ/exec"
-)
+ )
 
 # Configurações globais otimizadas
 CONFIG = {
@@ -45,7 +45,7 @@ CONFIG = {
     'MIN_TEXT_LENGTH': 700,
     'MAX_TEXT_LENGTH': 50000,
     'MIN_WORDS': 500,
-    'TIMEOUT_API': 15,
+    'TIMEOUT_API': 20, # Aumentado um pouco para a nova API
     'MAX_REFS': 20,
     'CACHE_TTL': 3600,
 }
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 def load_optimized_css() -> str:
     return """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' );
     .main .block-container{padding-top:1rem;padding-bottom:2rem;max-width:1200px}
     html,body,[class*="css"]{font-family:'Inter',sans-serif}
     .hero-header{background:linear-gradient(-45deg,#667eea,#764ba2,#f093fb,#f5576c);background-size:400% 400%;animation:gradientShift 15s ease infinite;padding:2rem;border-radius:20px;margin-bottom:2rem;text-align:center;color:white;box-shadow:0 20px 40px rgba(0,0,0,0.1);position:relative;overflow:hidden}
@@ -142,7 +142,7 @@ def limpar_texto_otimizado(texto_bruto: str) -> str:
     padroes = [re.compile(r"^Página?\s*\d+$", re.IGNORECASE),
                re.compile(r"^doi\s*:", re.IGNORECASE),
                re.compile(r"^www\.", re.IGNORECASE),
-               re.compile(r"^http", re.IGNORECASE)]
+               re.compile(r"^http", re.IGNORECASE )]
     filtradas = []
     capturar = False
     cont = Counter(linhas)
@@ -183,38 +183,44 @@ def verificar_codigo_google_sheets_otimizado(codigo: str) -> bool:
         logger.error(f"Erro verificar código: {e}")
         return False
 
+# ##################################################################
+# ## AQUI ESTÁ A ALTERAÇÃO PRINCIPAL ##
+# ##################################################################
 @st.cache_data(ttl=CONFIG['CACHE_TTL'])
-def buscar_referencias_crossref_otimizado(texto: str) -> List[Dict]:
+def buscar_referencias_semantic_scholar(texto: str) -> List[Dict]:
+    """Busca referências usando a API do Semantic Scholar."""
     if not texto or len(texto) < 100:
         return []
+    
+    # Usa a mesma lógica de extração de palavras-chave do original
     palavras = texto.split()[:20]
-    filt = [p for p in palavras if len(p)>3 and p.isalpha()][:10]
+    filt = [p for p in palavras if len(p) > 3 and p.isalpha()][:10]
     if not filt:
         return []
+    
     query = "+".join(filt)
-    url = f"https://api.crossref.org/works?query={query}&rows={CONFIG['MAX_REFS']}&sort=relevance"
+    # URL e parâmetros para a API do Semantic Scholar
+    url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={requests.utils.quote(query )}&limit={CONFIG['MAX_REFS']}&fields=title,abstract,year,url,externalIds"
+    
     try:
-        hdr = {'User-Agent': 'PlagIA/2.0 (mailto:pesas8810@gmail.com)', 'Accept': 'application/json'}
-        r = requests.get(url, headers=hdr, timeout=CONFIG['TIMEOUT_API'])
+        logger.info(f"Buscando no Semantic Scholar com a query: {query}")
+        r = requests.get(url, timeout=CONFIG['TIMEOUT_API'])
         r.raise_for_status()
-        items = r.json().get('message', {}).get('items', [])
+        results = r.json().get('data', [])
+        
         refs = []
-        for item in items:
-            titulo = item.get('title', ['Sem título'])[0]
-            resumo = item.get('abstract', '')[:35]
-            link = item.get('URL', '')
-            doi = item.get('DOI', '')
-            ano = ''
-            pp = item.get('published-print') or item.get('published-online')
-            if pp:
-                try:
-                    ano = str(pp['date-parts'][0][0])
-                except:
-                    pass
-            refs.append({'titulo': titulo, 'resumo': resumo, 'link': link, 'doi': doi, 'ano': ano})
+        for item in results:
+            # Formata a saída para ser compatível com o resto do código
+            refs.append({
+                'titulo': item.get('title', 'Sem título'),
+                'resumo': (item.get('abstract') or '')[:200], # Pega um resumo maior
+                'link': item.get('url', ''),
+                'doi': item.get('externalIds', {}).get('DOI', ''),
+                'ano': str(item.get('year', ''))
+            })
         return refs
     except Exception as e:
-        logger.error(f"Erro buscar refs: {e}")
+        logger.error(f"Erro ao buscar no Semantic Scholar: {e}")
         return []
 
 @lru_cache(maxsize=256)
@@ -261,7 +267,7 @@ class PDFOtimizado(FPDF):
             return ''.join(c if ord(c) < 128 else '?' for c in str(text))
 
 
-def gerar_relatorio_otimizado(referencias_sim: List, nome: str, email: str, codigo: str) -> Optional[str]:
+def gerar_relatorio_otimizado(referencias_sim: List, nome: str, email: str, codigo: str) -> Optional[bytes]:
     try:
         pdf = PDFOtimizado()
         pdf.add_page()
@@ -272,22 +278,23 @@ def gerar_relatorio_otimizado(referencias_sim: List, nome: str, email: str, codi
         )
         if referencias_sim:
             total = len(referencias_sim)
-            max_s = max(r[1] for r in referencias_sim) * 100
-            avg_s = np.mean([r[1] for r in referencias_sim]) * 100
+            max_s = max(r[1] for r in referencias_sim) * 100 if referencias_sim else 0
+            avg_s = np.mean([r[1] for r in referencias_sim]) * 100 if referencias_sim else 0
             stats = f"Total de Referências: {total}\nSimilaridade Máxima: {max_s:.2f}%\nSimilaridade Média: {avg_s:.2f}%"
             pdf.add_section("Estatísticas", stats)
             pdf.add_section("Top 10 Referências com Links", "")
             for i, (t, s, link, doi, ano) in enumerate(referencias_sim[:10], 1):
+                link_final = f"https://doi.org/{doi}" if doi else link
                 txt = (
-                    f"{i}. {t}\nAno: {ano or 'N/A'}\nLink: {link or doi or 'N/A'}\n"
+                    f"{i}. {t}\nAno: {ano or 'N/A'}\nLink: {link_final or 'N/A'}\n"
                     f"Similaridade: {s*100:.2f}%"
-                )
+                 )
                 pdf.add_section("", txt)
         else:
             pdf.add_section("Resultado", "Nenhuma referência encontrada.")
-        path = "/tmp/relatorio_plagia_otimizado.pdf"
-        pdf.output(path, 'F')
-        return path
+        
+        # Retorna os bytes do PDF em vez de salvar em arquivo
+        return pdf.output(dest='S').encode('latin-1')
     except Exception as e:
         logger.error(f"Erro gerar PDF: {e}")
         return None
@@ -334,7 +341,7 @@ def exibir_metricas_otimizadas(referencias_sim: List):
         </div>
         """, unsafe_allow_html=True)
     with c2:
-        mval = max(sims) * 100
+        mval = max(sims) * 100 if sims else 0
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-value">{mval:.1f}%</div>
@@ -342,7 +349,7 @@ def exibir_metricas_otimizadas(referencias_sim: List):
         </div>
         """, unsafe_allow_html=True)
     with c3:
-        aval = np.mean(sims) * 100
+        aval = np.mean(sims) * 100 if sims else 0
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-value">{aval:.1f}%</div>
@@ -373,13 +380,11 @@ def main():
         """, unsafe_allow_html=True
     )
 
-    # Inicializa estado
     if "consultas" not in st.session_state:
         st.session_state["consultas"] = 0
     if "historico" not in st.session_state:
         st.session_state["historico"] = []
 
-    # Sidebar com QR Code abaixo do histórico
     with st.sidebar:
         st.markdown(
             """
@@ -403,7 +408,6 @@ def main():
             for item in st.session_state["historico"][-3:]:
                 st.markdown(f"**{item['nome'][:20]}...** - {item['timestamp']}")
 
-            # QR Code para contribuição via PIX
             pix_key = "pesas8810@gmail.com"
             img_qr = qrcode.make(f"pix:{pix_key}")
             buf = BytesIO()
@@ -411,7 +415,6 @@ def main():
             st.image(buf.getvalue(), caption="💚 Apoie o Projeto via Pix", width=120)
             st.markdown(f"**Chave Pix:** {pix_key}")
 
-    # Layout principal
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown("""<div class="glass-card"><h3>📝 Registro do Usuário</h3></div>""", unsafe_allow_html=True)
@@ -419,10 +422,9 @@ def main():
         email = st.text_input("E-mail", placeholder="Digite seu e-mail")
         st.markdown("""<div class="glass-card"><h3>📄 Upload do Documento</h3></div>""", unsafe_allow_html=True)
         arquivo_pdf = st.file_uploader("Envie o artigo em PDF", type=["pdf"] )
-        if st.checkbox("Usar PDF de Teste (apenas para desenvolvimento)"):
-            with open("/home/ubuntu/teste_curto.pdf","rb") as f:
-                arquivo_pdf = BytesIO(f.read()); arquivo_pdf.name = "teste_curto.pdf"
-                st.info("PDF de teste carregado: teste_curto.pdf")
+        
+        # Removido o checkbox de teste que dependia de um caminho local
+        
         processar = st.button("🚀 Analisar Documento", disabled=(rest <= 0))
 
     with col2:
@@ -430,7 +432,7 @@ def main():
             """
             <div class="glass-card">
                 <h3>ℹ️ Sistema</h3>
-                <p><strong>Versão:</strong> Otimizada 2.1</p>
+                <p><strong>Versão:</strong> 8.0 (Semantic Scholar)</p>
                 <p><strong>Cache:</strong> Ativo</p>
             </div>
             """, unsafe_allow_html=True
@@ -448,7 +450,6 @@ def main():
             """, unsafe_allow_html=True
         )
 
-    # Processamento
     if processar:
         if not nome or not email:
             st.error("⚠️ Por favor, preencha nome e e-mail.")
@@ -459,6 +460,7 @@ def main():
         if rest <= 0:
             st.error("❌ Limite de consultas atingido.")
             return
+        
         container = st.container()
         with container:
             bar = st.progress(0)
@@ -470,80 +472,72 @@ def main():
                 if not texto:
                     st.error("❌ Não foi possível extrair texto do PDF.")
                     return
-                status.text("🔍 Validando texto...")
-                bar.progress(30)
+                
+                status.text("🔍 Validando texto..."); bar.progress(30)
                 ok, msg = validar_texto_robusto(texto)
                 if not ok:
-                    st.error(f"❌ {msg}")
-                    return
-                status.text("🧹 Processando texto...")
-                bar.progress(40)
+                    st.error(f"❌ {msg}"); return
+                
+                status.text("🧹 Processando texto..."); bar.progress(40)
                 clean = limpar_texto_otimizado(texto)
                 ok2, msg2 = validar_texto_robusto(clean)
                 if not ok2:
-                    st.error(f"❌ Após processamento: {msg2}")
-                    return
-                status.text("🔎 Buscando referências...")
-                bar.progress(60)
-                refs = buscar_referencias_crossref_otimizado(clean)
+                    st.error(f"❌ Após processamento: {msg2}"); return
+                
+                status.text("🔎 Buscando referências (Semantic Scholar)..."); bar.progress(60)
+                # Alteração da chamada da função
+                refs = buscar_referencias_semantic_scholar(clean)
                 if not refs:
-                    st.warning("⚠️ Nenhuma referência encontrada na base de dados.")
-                    bar.progress(100)
-                    st.session_state['consultas'] += 1
-                    return
-                status.text("📊 Calculando similaridades...")
-                bar.progress(80)
+                    st.warning("⚠️ Nenhuma referência encontrada na base de dados."); bar.progress(100)
+                    st.session_state['consultas'] += 1; return
+                
+                status.text("📊 Calculando similaridades..."); bar.progress(80)
                 resultados = []
-                for r in refs[:CONFIG['MAX_REFS']]:
+                for r in refs: # Não precisa mais limitar com [:CONFIG['MAX_REFS']]
                     base = f"{r['titulo']} {r['resumo']}"
                     sim = calcular_similaridade_otimizada(clean, base)
                     resultados.append((r['titulo'], sim, r['link'], r['doi'], r['ano']))
                 resultados.sort(key=lambda x: x[1], reverse=True)
-                status.text("✅ Gerando resultados...")
-                bar.progress(90)
+                
+                status.text("✅ Gerando resultados..."); bar.progress(90)
                 codigo = gerar_codigo_verificacao(clean)
                 salvar_email_google_sheets_otimizado(nome, email, codigo)
-                st.session_state['historico'].append({
-                    'nome': nome, 'timestamp': datetime.now().strftime('%H:%M'), 'codigo': codigo
-                })
-                bar.progress(100)
-                time.sleep(0.5)
+                st.session_state['historico'].append({'nome': nome, 'timestamp': datetime.now().strftime('%H:%M'), 'codigo': codigo})
+                
+                bar.progress(100); time.sleep(0.5)
                 container.empty()
+                
                 st.success(f"✅ Análise concluída! Código: **{codigo}**")
                 st.markdown("### 📊 Resultados")
                 exibir_metricas_otimizadas(resultados)
+                
                 if resultados:
                     with st.expander("📈 Visualização Detalhada", expanded=False):
                         fig = criar_grafico_barras_otimizado(resultados)
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True)
+                        if fig: st.plotly_chart(fig, use_container_width=True)
+                
                 if resultados:
                     st.markdown("### 📋 Top 10 Referências")
                     import pandas as pd
-                    df = pd.DataFrame([{
-                        '#': i+1,
-                        'Título': ref[0][:60] + ('...' if len(ref[0])>60 else ''),
-                        'Similaridade': f"{ref[1]*100:.1f}%",
-                        'Ano': ref[4] or 'N/A'
-                    } for i, ref in enumerate(resultados[:10])])
+                    df = pd.DataFrame([{'#': i+1, 'Título': ref[0][:60] + ('...' if len(ref[0])>60 else ''), 'Similaridade': f"{ref[1]*100:.1f}%", 'Ano': ref[4] or 'N/A'} for i, ref in enumerate(resultados[:10])])
                     st.dataframe(df, use_container_width=True, hide_index=True)
-                pdf_path = gerar_relatorio_otimizado(resultados, nome, email, codigo)
-                if pdf_path:
-                    with open(pdf_path, 'rb') as f:
-                        st.download_button(
-                            "📄 Baixar Relatório PDF",
-                            f,
-                            "relatorio_plagia_otimizado.pdf",
-                            "application/pdf"
-                        )
+                
+                pdf_bytes = gerar_relatorio_otimizado(resultados, nome, email, codigo)
+                if pdf_bytes:
+                    st.download_button(
+                        "📄 Baixar Relatório PDF",
+                        data=pdf_bytes,
+                        file_name="relatorio_plagia_otimizado.pdf",
+                        mime="application/pdf"
+                    )
+                
                 st.session_state['consultas'] += 1
                 gc.collect()
             except Exception as e:
-                logger.error(f"Erro durante processamento: {e}")
+                logger.error(f"Erro durante processamento: {e}", exc_info=True)
                 st.error(f"❌ Erro durante o processamento: {e}")
                 container.empty()
 
-    # Verificação de código
     st.markdown("---")
     st.markdown("### 🔍 Verificar Código")
     c1, c2 = st.columns([3, 1])
