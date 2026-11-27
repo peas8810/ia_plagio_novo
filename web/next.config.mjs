@@ -1,0 +1,1 @@
+export default { basePath: '/plagio', poweredByHeader: false };
