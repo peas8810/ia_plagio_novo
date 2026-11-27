@@ -683,6 +683,44 @@ if st.session_state.analysis:
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.divider()
+with st.expander("Já tenho um relatório — consultar pagamento ou baixar"):
+    st.caption("Use esta opção se você fechou a página após gerar ou pagar o relatório.")
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        lookup_id = st.text_input("ID do relatório", key="lookup_report_id").strip().upper()
+    with rc2:
+        lookup_email = st.text_input("E-mail usado na análise", key="lookup_email").strip().lower()
+
+    if st.button("Consultar relatório", key="lookup_button", use_container_width=True):
+        if not supabase_ready():
+            st.error("A consulta persistente ainda não está configurada.")
+        elif not lookup_id or not valid_email(lookup_email):
+            st.error("Informe o ID do relatório e um e-mail válido.")
+        else:
+            try:
+                lookup_order = get_order(lookup_id, lookup_email)
+                if not lookup_order:
+                    st.error("Relatório não localizado com esses dados.")
+                elif lookup_order.get("status") == "paid":
+                    recovered_pdf = download_report(lookup_id)
+                    st.success("Pagamento confirmado. O relatório está liberado.")
+                    st.download_button(
+                        "Baixar relatório pago",
+                        data=recovered_pdf,
+                        file_name=f"PlagIA_{lookup_id}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True,
+                        key="lookup_download",
+                    )
+                elif lookup_order.get("status") == "review":
+                    st.info("Pagamento informado e aguardando conferência administrativa.")
+                else:
+                    st.warning("O relatório existe, mas o pagamento ainda não foi confirmado.")
+            except Exception as exc:
+                st.error(f"Não foi possível consultar o relatório: {exc}")
+
+st.divider()
 st.caption(
     "PlagIA é uma ferramenta de triagem. Similaridade textual não é sinônimo de plágio. "
     "A conclusão editorial deve considerar citações, referências, contexto e avaliação humana."
