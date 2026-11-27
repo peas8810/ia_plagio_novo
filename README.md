@@ -9,8 +9,9 @@ Esta branch transforma o protótipo original em um MVP comercial com relatório 
 3. O resultado, o parecer e as evidências ficam visíveis na página.
 4. O PDF profissional é gerado e armazenado de forma privada.
 5. Para baixar, o autor paga R$ 20,00 via PIX.
-6. No MVP, o pagamento entra em revisão administrativa.
-7. Após aprovação no painel lateral, o PDF é liberado.
+6. O autor informa o identificador EndToEnd do comprovante.
+7. O administrador confere valor, recebedor e EndToEnd no extrato e confirma o recebimento no painel lateral.
+8. O autor usa o ID do relatório e o e-mail da análise para acompanhar a revisão e baixar novamente após a aprovação.
 
 ## Mudanças metodológicas
 
@@ -29,7 +30,7 @@ O sistema não deve chamar o escore de “percentual de plágio”. Similaridade
 
 ## Configuração
 
-Configure como secrets/variáveis do ambiente, nunca no GitHub:
+Configure os valores nos secrets do Streamlit ou nas variáveis de ambiente do servidor. O QR Code só aparece após a gravação do PDF e do pedido e com os dados do recebedor e a senha administrativa configurados.
 
 PIX_KEY = sua-chave-pix
 PIX_MERCHANT_NAME = nome-do-recebedor
@@ -47,7 +48,7 @@ CROSSREF_MAILTO = email-de-contato
 
 ## Supabase
 
-Execute o arquivo supabase_schema.sql no SQL Editor. Ele cria a tabela de pedidos e o bucket privado dos relatórios.
+Execute o arquivo supabase_schema.sql no SQL Editor. Ele cria a tabela de pedidos, o índice que impede reutilizar o EndToEnd de um Pix em outro pedido ativo e o bucket privado dos relatórios. Em uma base com pedidos anteriores, concilie eventuais EndToEnd duplicados antes de aplicar o índice.
 
 ## Próxima evolução
 

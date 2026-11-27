@@ -18,6 +18,10 @@ create index if not exists plagia_orders_email_idx
 create index if not exists plagia_orders_status_idx
   on public.plagia_orders (status);
 
+create unique index if not exists plagia_orders_active_payment_reference_idx
+  on public.plagia_orders (lower(payment_reference))
+  where status in ('review', 'paid') and payment_reference is not null;
+
 alter table public.plagia_orders enable row level security;
 
 -- O aplicativo usa a service role apenas no servidor.

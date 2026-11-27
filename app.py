@@ -4,6 +4,7 @@ import json
 import html
 import uuid
 import hashlib
+from hmac import compare_digest
 import unicodedata
 from io import BytesIO
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ APP_NAME = "PlagIA"
 PRICE_BRL = 20.00
 MAX_FILE_MB = 20
 TIMEOUT = 20
+EVIDENCE_THRESHOLD = 0.18
 
 
 def secret(name, default=None):
@@ -168,7 +170,8 @@ def analyze(text):
     if not chunks:
         raise ValueError("Texto insuficiente para uma análise segmentada.")
 
-    candidates, errors = crossref_search(select_queries(chunks))
+    queries = select_queries(chunks)
+    candidates, errors = crossref_search(queries)
     sources = []
     for src in candidates:
         source_text = clean_space(f"{src['title']}. {src['abstract']}")
@@ -186,12 +189,14 @@ def analyze(text):
 
     covered = 0
     for chunk in chunks:
-        if any(compare_chunk(chunk, clean_space(f"{s['title']}. {s['abstract']}")) >= 0.18 for s in sources[:10]):
+        if any(compare_chunk(chunk, clean_space(f"{s['title']}. {s['abstract']}")) >= EVIDENCE_THRESHOLD for s in sources[:10]):
             covered += 1
     coverage = covered / len(chunks) if chunks else 0.0
-    evidence = len([s for s in sources if s["score"] >= 0.18])
+    evidence = len([s for s in sources if s["score"] >= EVIDENCE_THRESHOLD])
 
-    if top >= 0.42 or coverage >= 0.30:
+    if not sources:
+        risk = "Inconclusivo"
+    elif top >= 0.42 or coverage >= 0.30:
         risk = "Elevado"
     elif top >= 0.24 or coverage >= 0.12:
         risk = "Moderado"
@@ -200,7 +205,8 @@ def analyze(text):
 
     return {
         "sources": sources[:20],
-        "errors": errors,
+        "queries_attempted": len(queries),
+        "queries_failed": len(errors),
         "metrics": {
             "risk": risk,
             "top_similarity": round(top * 100, 1),
@@ -228,14 +234,14 @@ def deterministic_opinion(result):
     )
 
 
-def ai_opinion(result, metadata):
+def ai_opinion(result, page_count):
     key = secret("OPENAI_API_KEY")
     model = secret("OPENAI_MODEL", "gpt-6.2-sol")
-    if not key or OpenAI is None:
+    if not key or OpenAI is None or not result["metrics"]["evidence_count"]:
         return deterministic_opinion(result), False
 
     payload = {
-        "document": metadata,
+        "pages": page_count,
         "metrics": result["metrics"],
         "sources": [
             {
@@ -245,7 +251,7 @@ def ai_opinion(result, metadata):
                 "score_percent": round(s["score"] * 100, 1),
                 "evidence_excerpt": s.get("snippet", "")[:350],
             }
-            for s in result["sources"][:8]
+            for s in result["sources"][:8] if s["score"] >= EVIDENCE_THRESHOLD
         ],
     }
     instructions = (
@@ -283,8 +289,10 @@ def pix_payload(key, merchant_name, merchant_city, amount, txid):
     key = clean_space(key)
     if not key:
         return ""
-    merchant_name = strip_accents(merchant_name).upper()[:25] or "PLAGIA"
-    merchant_city = strip_accents(merchant_city).upper()[:15] or "BRASIL"
+    merchant_name = clean_space(strip_accents(merchant_name).encode("ascii", "ignore").decode()).upper()[:25]
+    merchant_city = clean_space(strip_accents(merchant_city).encode("ascii", "ignore").decode()).upper()[:15]
+    if not merchant_name or not merchant_city:
+        return ""
     txid = re.sub(r"[^A-Za-z0-9]", "", txid)[:25] or "PLAGIA"
     account = emv("26", emv("00", "br.gov.bcb.pix") + emv("01", key))
     body = (
@@ -296,7 +304,7 @@ def pix_payload(key, merchant_name, merchant_city, amount, txid):
 
 
 def qr_png(payload):
-    qr = qrcode.QRCode(box_size=8, border=3)
+    qr = qrcode.QRCode(box_size=8, border=4)
     qr.add_data(payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -316,35 +324,40 @@ def sb_headers(extra=None):
     return h
 
 
-def db(method, table, params=None, payload=None):
+def db(method, table, params=None, payload=None, prefer="return=representation"):
     url = f"{secret('SUPABASE_URL').rstrip('/')}/rest/v1/{table}"
-    headers = sb_headers({"Content-Type": "application/json", "Prefer": "return=representation"})
+    headers = sb_headers({"Content-Type": "application/json", "Prefer": prefer})
     r = requests.request(method, url, headers=headers, params=params, json=payload, timeout=TIMEOUT)
     r.raise_for_status()
     return r.json() if r.text else []
 
 
 def create_order(report_id, name, email, report_hash):
-    return db("POST", "plagia_orders", payload={
+    return db("POST", "plagia_orders", params={"on_conflict": "report_id"}, payload={
         "report_id": report_id,
         "name": name,
         "email": email,
         "amount": PRICE_BRL,
         "status": "pending",
         "report_hash": report_hash,
-    })
+    }, prefer="return=representation,resolution=ignore-duplicates")
 
 
-def get_order(report_id, email=None):
-    params = {"report_id": f"eq.{report_id}", "select": "*", "limit": "1"}
-    if email:
-        params["email"] = f"eq.{email}"
+def get_order(report_id, email):
+    params = {"report_id": f"eq.{report_id}", "email": f"eq.{email}", "select": "*", "limit": "1"}
     rows = db("GET", "plagia_orders", params=params)
     return rows[0] if rows else None
 
 
-def update_order(report_id, changes):
-    return db("PATCH", "plagia_orders", params={"report_id": f"eq.{report_id}"}, payload=changes)
+def update_order(order, expected_status, changes):
+    params = {
+        "report_id": f"eq.{order['report_id']}",
+        "email": f"eq.{order['email']}",
+        "status": f"eq.{expected_status}",
+    }
+    if expected_status == "review":
+        params["payment_reference"] = f"eq.{order['payment_reference']}"
+    return db("PATCH", "plagia_orders", params=params, payload=changes)
 
 
 def upload_report(report_id, pdf_bytes):
@@ -356,13 +369,26 @@ def upload_report(report_id, pdf_bytes):
     r.raise_for_status()
 
 
-def download_report(report_id):
+def download_report(order):
+    if order["status"] != "paid":
+        raise ValueError("O pedido precisa estar pago para baixar o relatório.")
+    report_id = order["report_id"]
     base = secret("SUPABASE_URL").rstrip("/")
     bucket = secret("SUPABASE_REPORT_BUCKET", "plagia-reports")
     url = f"{base}/storage/v1/object/{bucket}/{report_id}.pdf"
     r = requests.get(url, headers=sb_headers(), timeout=TIMEOUT)
     r.raise_for_status()
-    return r.content
+    pdf_bytes = r.content
+    report_hash = order.get("report_hash")
+    if report_hash and not compare_digest(hashlib.sha256(pdf_bytes).hexdigest(), report_hash):
+        raise ValueError("Falha na verificação de integridade do relatório.")
+    return pdf_bytes
+
+
+def save_report(report_id, name, email, pdf_bytes):
+    report_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    upload_report(report_id, pdf_bytes)
+    create_order(report_id, name, email, report_hash)
 
 
 class ReportPDF(FPDF):
@@ -370,20 +396,22 @@ class ReportPDF(FPDF):
         return str(text or "").encode("latin-1", "replace").decode("latin-1")
 
     def header(self):
-        self.set_font("Arial", "B", 15)
-        self.cell(0, 8, self.safe("PlagIA | Relatório Técnico de Similaridade e Integridade Textual"), 0, 1, "C")
-        self.set_font("Arial", "", 8)
-        self.cell(0, 5, self.safe("Triagem técnica — não constitui prova isolada de plágio"), 0, 1, "C")
+        self.set_font("Helvetica", "B", 15)
+        self.cell(0, 8, self.safe("PlagIA | Relatório Técnico de Similaridade e Integridade Textual"),
+                  align="C", new_x="LMARGIN", new_y="NEXT")
+        self.set_font("Helvetica", "", 8)
+        self.cell(0, 5, self.safe("Triagem técnica — não constitui prova isolada de plágio"),
+                  align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(3)
 
     def section(self, title):
-        self.set_font("Arial", "B", 11)
-        self.multi_cell(0, 6, self.safe(title))
+        self.set_font("Helvetica", "B", 11)
+        self.multi_cell(0, 6, self.safe(title), new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def body(self, text):
-        self.set_font("Arial", "", 9)
-        self.multi_cell(0, 5, self.safe(text))
+        self.set_font("Helvetica", "", 9)
+        self.multi_cell(0, 5, self.safe(text), new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
 
@@ -405,7 +433,9 @@ def generate_pdf(name, email, report_id, analysis, opinion, ai_used, filename):
         f"Maior escore interno: {m['top_similarity']:.1f}%\n"
         f"Cobertura de trechos com evidência: {m['coverage']:.1f}%\n"
         f"Fontes comparadas: {m['sources_checked']}\n"
-        f"Evidências acima do limiar: {m['evidence_count']}"
+        f"Evidências acima do limiar: {m['evidence_count']}\n"
+        f"Consultas bibliográficas concluídas: {analysis['queries_attempted'] - analysis['queries_failed']}"
+        f"/{analysis['queries_attempted']}"
     )
 
     pdf.section("3. Parecer técnico")
@@ -413,9 +443,10 @@ def generate_pdf(name, email, report_id, analysis, opinion, ai_used, filename):
     pdf.body("Parecer ampliado com agente de IA." if ai_used else "Parecer automatizado por regras; agente de IA não configurado.")
 
     pdf.section("4. Fontes e evidências principais")
-    if not analysis["sources"]:
-        pdf.body("Nenhuma fonte bibliográfica com dados suficientes foi recuperada.")
-    for i, s in enumerate(analysis["sources"][:10], 1):
+    evidence = [source for source in analysis["sources"] if source["score"] >= EVIDENCE_THRESHOLD]
+    if not evidence:
+        pdf.body("Nenhuma fonte atingiu o limiar de evidência nesta triagem.")
+    for i, s in enumerate(evidence[:10], 1):
         pdf.body(
             f"{i}. {s['title']}\nDOI: {s.get('doi') or 'não informado'}\n"
             f"Escore interno: {s['score']*100:.1f}%\nFonte: {s.get('url') or 'não informado'}\n"
@@ -434,7 +465,7 @@ def generate_pdf(name, email, report_id, analysis, opinion, ai_used, filename):
     digest = hashlib.sha256((report_id + email).encode()).hexdigest()[:16].upper()
     pdf.body(f"Código de integridade: {digest}\nID do relatório: {report_id}")
 
-    out = pdf.output(dest="S")
+    out = pdf.output()
     return bytes(out) if isinstance(out, (bytes, bytearray)) else out.encode("latin-1")
 
 
@@ -444,7 +475,7 @@ def admin_panel():
         return
     with st.sidebar.expander("Administração"):
         supplied = st.text_input("Senha administrativa", type="password", key="admin_pw")
-        if supplied != password:
+        if not compare_digest(supplied.encode(), password.encode()):
             return
         try:
             rows = db("GET", "plagia_orders", params={
@@ -465,12 +496,91 @@ def admin_panel():
                 f"Relatório {row.get('report_id')} | "
                 f"E2E/ID: {row.get('payment_reference') or 'não informado'}"
             )
-            if st.button("Marcar como pago", key=f"approve_{row.get('report_id')}"):
-                update_order(row["report_id"], {
-                    "status": "paid",
-                    "paid_at": datetime.now(timezone.utc).isoformat(),
+            st.caption(f"Valor esperado: R$ {float(row['amount']):.2f}. Confira valor, recebedor e E2E no extrato.")
+            approve = st.button("Confirmar recebimento no extrato", key=f"approve_{row['report_id']}")
+            return_pending = st.button("Solicitar correção do E2E", key=f"correct_{row['report_id']}")
+            if approve or return_pending:
+                changes = (
+                    {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}
+                    if approve else {"status": "pending", "payment_reference": None}
+                )
+                try:
+                    updated = update_order(row, "review", changes)
+                    if updated:
+                        st.rerun()
+                    else:
+                        st.info("O pedido mudou. Atualize a página para consultar o estado atual.")
+                except requests.RequestException:
+                    st.error("Não foi possível atualizar o pedido. Tente novamente.")
+
+
+def payment_panel(order, widget_prefix):
+    report_id = order["report_id"]
+    status = order["status"]
+    if status == "paid":
+        st.success("Pagamento confirmado. Você pode baixar o relatório novamente sem cobrança.")
+        if st.button("Preparar download", key=f"{widget_prefix}_prepare_{report_id}"):
+            try:
+                pdf_bytes = download_report(order)
+            except (requests.RequestException, ValueError):
+                st.error("Não foi possível carregar o PDF. Tente novamente.")
+                return
+            st.download_button(
+                "Baixar relatório completo em PDF",
+                data=pdf_bytes,
+                file_name=f"PlagIA_{report_id}.pdf",
+                mime="application/pdf",
+                type="primary",
+                key=f"{widget_prefix}_download_{report_id}",
+            )
+        return
+    if status == "review":
+        st.info("Pagamento informado e aguardando conferência administrativa.")
+        return
+    if status != "pending":
+        st.warning("Este pedido foi encerrado.")
+        return
+
+    pix_key = secret("PIX_KEY", "")
+    payload = pix_payload(
+        pix_key, secret("PIX_MERCHANT_NAME", ""), secret("PIX_MERCHANT_CITY", ""),
+        float(order["amount"]), report_id,
+    )
+    if not payload or not secret("ADMIN_PASSWORD"):
+        st.info("O pagamento está indisponível no momento. Tente consultar este relatório mais tarde.")
+        return
+
+    st.write(f"**Valor para baixar o relatório: R$ {float(order['amount']):.2f}**".replace(".", ","))
+    qr_column, code_column = st.columns([1, 2])
+    with qr_column:
+        st.image(qr_png(payload), caption="QR Code Pix", width=260)
+    with code_column:
+        st.write("**Pix Copia e Cola**")
+        st.code(payload, language=None)
+        st.caption("Se já pagou, informe o identificador EndToEnd que consta no comprovante.")
+        payment_ref = st.text_input(
+            "Identificador EndToEnd (E2E)", key=f"{widget_prefix}_reference_{report_id}",
+        ).strip()
+        if st.button("Solicitar conferência", key=f"{widget_prefix}_submit_{report_id}"):
+            if not re.fullmatch(r"[Ee][0-9]{20}[A-Za-z0-9]{11}", payment_ref):
+                st.error("Informe o identificador EndToEnd de 32 caracteres do comprovante Pix.")
+                return
+            try:
+                updated = update_order(order, "pending", {
+                    "status": "review",
+                    "payment_reference": payment_ref,
                 })
-                st.rerun()
+            except requests.HTTPError as exc:
+                if exc.response is not None and exc.response.status_code == 409:
+                    st.error("Este identificador Pix já está vinculado a um pedido.")
+                else:
+                    st.error("Não foi possível registrar o pagamento. Tente novamente.")
+            except requests.RequestException:
+                st.error("Não foi possível registrar o pagamento. Tente novamente.")
+            else:
+                if updated:
+                    st.rerun()
+                st.info("O pedido mudou. Consulte novamente para ver o estado atual.")
 
 
 st.set_page_config(
@@ -483,7 +593,6 @@ st.markdown("""
 <style>
 .block-container {max-width: 1120px; padding-top: 2rem;}
 [data-testid="stMetric"] {border: 1px solid #e8e8e8; border-radius: 14px; padding: 14px;}
-.paywall {border: 1px solid #d8e7dc; border-radius: 16px; padding: 18px; background: #fbfffc;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -493,13 +602,17 @@ for key, default in {
     "pdf_bytes": None,
     "opinion": None,
     "ai_used": False,
+    "report_name": None,
+    "report_email": None,
+    "report_saved": False,
+    "lookup": None,
 }.items():
     st.session_state.setdefault(key, default)
 
 admin_panel()
 
 st.title("🍀 PlagIA")
-st.caption("Triagem técnica de similaridade e integridade textual com relatório profissional e rastreável.")
+st.caption("Análise e consulta do resultado na página gratuitas. Download do relatório em PDF por R$ 20,00.")
 
 with st.container(border=True):
     st.subheader("Analisar manuscrito")
@@ -510,7 +623,7 @@ with st.container(border=True):
         email = st.text_input("E-mail")
     uploaded = st.file_uploader(f"Arquivo PDF (até {MAX_FILE_MB} MB)", type=["pdf"])
     consent = st.checkbox(
-        "Autorizo o processamento do texto para realizar consultas bibliográficas necessárias à análise."
+        "Autorizo o uso de trechos do PDF nas consultas ao Crossref e, quando disponível, na elaboração do parecer por IA."
     )
     process = st.button("Analisar documento", type="primary", use_container_width=True)
 
@@ -538,12 +651,7 @@ if process:
 
                 result = analyze(text)
                 report_id = uuid.uuid4().hex[:16].upper()
-                opinion, ai_used = ai_opinion(result, {
-                    "name": name,
-                    "email": email,
-                    "pages": pages,
-                    "filename": uploaded.name,
-                })
+                opinion, ai_used = ai_opinion(result, pages)
                 pdf_bytes = generate_pdf(
                     name, email, report_id, result, opinion, ai_used, uploaded.name
                 )
@@ -553,15 +661,9 @@ if process:
                 st.session_state.pdf_bytes = pdf_bytes
                 st.session_state.opinion = opinion
                 st.session_state.ai_used = ai_used
-
-                if supabase_ready():
-                    create_order(
-                        report_id,
-                        name.strip(),
-                        email.strip().lower(),
-                        hashlib.sha256(pdf_bytes).hexdigest(),
-                    )
-                    upload_report(report_id, pdf_bytes)
+                st.session_state.report_name = name.strip()
+                st.session_state.report_email = email.strip().lower()
+                st.session_state.report_saved = False
             except Exception as exc:
                 st.error(f"Não foi possível concluir a análise: {exc}")
 
@@ -577,7 +679,12 @@ if st.session_state.analysis:
     c.metric("Cobertura", f"{m['coverage']:.1f}%")
     d.metric("Fontes comparadas", m["sources_checked"])
 
-    st.info("Os percentuais são escores internos de similaridade, não percentual de plágio.")
+    st.info("Os percentuais representam escores internos de similaridade e cobertura da triagem.")
+    if result["queries_failed"]:
+        st.warning(
+            f"Crossref: {result['queries_failed']} de {result['queries_attempted']} consultas falharam. "
+            "O resultado reflete apenas as consultas concluídas."
+        )
 
     st.markdown("### Parecer técnico")
     st.write(st.session_state.opinion)
@@ -588,9 +695,10 @@ if st.session_state.analysis:
     )
 
     st.markdown("### Evidências e fontes principais")
-    if not result["sources"]:
-        st.warning("Nenhuma fonte com dados suficientes foi recuperada nesta triagem.")
-    for i, s in enumerate(result["sources"][:8], 1):
+    evidence = [source for source in result["sources"] if source["score"] >= EVIDENCE_THRESHOLD]
+    if not evidence:
+        st.info("Nenhuma fonte atingiu o limiar de evidência nesta triagem.")
+    for i, s in enumerate(evidence[:10], 1):
         with st.expander(f"{i}. {s['title'][:110]} — {s['score']*100:.1f}%"):
             st.write(f"**DOI:** {s.get('doi') or 'Não informado'}")
             if s.get("authors"):
@@ -608,117 +716,60 @@ if st.session_state.analysis:
     )
 
     st.markdown("### Relatório profissional em PDF")
-    st.markdown('<div class="paywall">', unsafe_allow_html=True)
-    st.write("**Valor para baixar o relatório completo: R$ 20,00**")
-    st.caption(f"ID do relatório: {st.session_state.report_id}")
+    report_id = st.session_state.report_id
+    report_email = st.session_state.report_email
+    st.caption(f"ID do relatório: {report_id}")
 
-    pix_key = secret("PIX_KEY", "")
-    merchant_name = secret("PIX_MERCHANT_NAME", "PLAGIA")
-    merchant_city = secret("PIX_MERCHANT_CITY", "TEOFILO OTONI")
-
-    if not pix_key:
-        st.warning(
-            "O PIX ainda não foi configurado pelo administrador. "
-            "O relatório permanece bloqueado para download."
-        )
-    elif not supabase_ready():
-        st.warning(
-            "O armazenamento de pagamentos ainda não foi configurado. "
-            "Para não liberar relatórios sem confirmação, o download permanece bloqueado."
-        )
+    if not supabase_ready():
+        st.info("A análise está disponível na página. A compra do PDF está temporariamente indisponível.")
     else:
-        payload = pix_payload(
-            pix_key,
-            merchant_name,
-            merchant_city,
-            PRICE_BRL,
-            st.session_state.report_id,
-        )
-        p1, p2 = st.columns([1, 2])
-        with p1:
-            st.image(qr_png(payload), caption="PIX — R$ 20,00", width=260)
-        with p2:
-            st.write("**PIX copia e cola**")
-            st.code(payload, language=None)
-            st.write(f"**Chave PIX:** {pix_key}")
-            payment_ref = st.text_input(
-                "Identificador da transação (E2E/ID do comprovante)",
-                key="payment_ref",
-            )
-
-            if st.button("Enviei o PIX — solicitar liberação", use_container_width=True):
-                if len(clean_space(payment_ref)) < 6:
-                    st.error("Informe o identificador da transação para permitir a conferência.")
-                else:
-                    update_order(st.session_state.report_id, {
-                        "status": "review",
-                        "payment_reference": clean_space(payment_ref)[:120],
-                    })
-                    st.success("Pagamento enviado para conferência administrativa.")
-
-            if st.button("Verificar pagamento e liberar PDF", use_container_width=True):
-                order = get_order(st.session_state.report_id, email.strip().lower())
-                if order and order.get("status") == "paid":
-                    st.session_state.pdf_bytes = download_report(st.session_state.report_id)
-                    st.success("Pagamento confirmado. Relatório liberado.")
-                elif order and order.get("status") == "review":
-                    st.info("Pagamento aguardando conferência.")
-                else:
-                    st.warning("Pagamento ainda não confirmado.")
-
-            try:
-                order = get_order(st.session_state.report_id, email.strip().lower())
-            except Exception:
-                order = None
-
-            if order and order.get("status") == "paid":
-                st.download_button(
-                    "Baixar relatório completo em PDF",
-                    data=st.session_state.pdf_bytes or download_report(st.session_state.report_id),
-                    file_name=f"PlagIA_{st.session_state.report_id}.pdf",
-                    mime="application/pdf",
-                    type="primary",
-                    use_container_width=True,
+        try:
+            if not st.session_state.report_saved:
+                save_report(
+                    report_id, st.session_state.report_name, report_email, st.session_state.pdf_bytes,
                 )
-    st.markdown("</div>", unsafe_allow_html=True)
+                st.session_state.report_saved = True
+            order = get_order(report_id, report_email)
+        except requests.RequestException:
+            st.warning("Não foi possível preparar o pedido. Tente novamente antes de pagar.")
+            st.button("Tentar novamente", key="retry_order")
+        else:
+            if order:
+                payment_panel(order, "current")
+            else:
+                st.session_state.report_saved = False
+                st.warning("Pedido indisponível. Tente novamente antes de pagar.")
+                st.button("Tentar novamente", key="retry_missing_order")
 
 st.divider()
-with st.expander("Já tenho um relatório — consultar pagamento ou baixar"):
-    st.caption("Use esta opção se você fechou a página após gerar ou pagar o relatório.")
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        lookup_id = st.text_input("ID do relatório", key="lookup_report_id").strip().upper()
-    with rc2:
-        lookup_email = st.text_input("E-mail usado na análise", key="lookup_email").strip().lower()
+with st.expander("Já tenho um relatório"):
+    st.caption("Informe o ID e o e-mail usados na análise para acompanhar o pagamento ou baixar o PDF.")
+    with st.form("lookup_form"):
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            lookup_id = st.text_input("ID do relatório").strip().upper()
+        with rc2:
+            lookup_email = st.text_input("E-mail usado na análise").strip().lower()
+        if st.form_submit_button("Consultar ou atualizar"):
+            st.session_state.lookup = None
+            if not re.fullmatch(r"[0-9A-F]{16}", lookup_id) or not valid_email(lookup_email):
+                st.error("Informe um ID de relatório válido e o e-mail usado na análise.")
+            else:
+                st.session_state.lookup = (lookup_id, lookup_email)
 
-    if st.button("Consultar relatório", key="lookup_button", use_container_width=True):
+    if st.session_state.lookup:
         if not supabase_ready():
-            st.error("A consulta persistente ainda não está configurada.")
-        elif not lookup_id or not valid_email(lookup_email):
-            st.error("Informe o ID do relatório e um e-mail válido.")
+            st.info("A consulta está temporariamente indisponível.")
         else:
             try:
-                lookup_order = get_order(lookup_id, lookup_email)
-                if not lookup_order:
-                    st.error("Relatório não localizado com esses dados.")
-                elif lookup_order.get("status") == "paid":
-                    recovered_pdf = download_report(lookup_id)
-                    st.success("Pagamento confirmado. O relatório está liberado.")
-                    st.download_button(
-                        "Baixar relatório pago",
-                        data=recovered_pdf,
-                        file_name=f"PlagIA_{lookup_id}.pdf",
-                        mime="application/pdf",
-                        type="primary",
-                        use_container_width=True,
-                        key="lookup_download",
-                    )
-                elif lookup_order.get("status") == "review":
-                    st.info("Pagamento informado e aguardando conferência administrativa.")
+                lookup_order = get_order(*st.session_state.lookup)
+            except requests.RequestException:
+                st.error("Não foi possível consultar o relatório. Tente novamente.")
+            else:
+                if lookup_order:
+                    payment_panel(lookup_order, "lookup")
                 else:
-                    st.warning("O relatório existe, mas o pagamento ainda não foi confirmado.")
-            except Exception as exc:
-                st.error(f"Não foi possível consultar o relatório: {exc}")
+                    st.error("Relatório não localizado com esses dados.")
 
 st.divider()
 st.caption(
