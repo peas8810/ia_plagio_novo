@@ -1,10 +1,7 @@
-streamlit
-requests
-pypdf2
-fpdf
-numpy
-plotly
-qrcode
-Pillow
-fuzzywuzzy
-python-Levenshtein
+streamlit>=1.44
+requests>=2.31
+pypdf>=5.0
+fpdf2>=2.8
+qrcode>=8.0
+Pillow>=10.0
+openai>=2.0
